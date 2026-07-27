@@ -8,7 +8,7 @@ public class RunWindowService(RunWindow runWindow)
     {
         if (runWindow.IsVisible)
         {
-            runWindow.Hide();
+            runWindow.HideAndReset();
         }
         else
         {

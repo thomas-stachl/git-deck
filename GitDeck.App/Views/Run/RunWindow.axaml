@@ -17,20 +17,69 @@
         TransparencyLevelHint="AcrylicBlur, Blur, Transparent"
         Background="Transparent">
 
+    <Window.Styles>
+        <Style Selector="ListBoxItem">
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Margin" Value="0,1" />
+        </Style>
+        <Style Selector="ListBoxItem:selected">
+            <Setter Property="Background" Value="#33FFFFFF" />
+        </Style>
+        <Style Selector="ListBoxItem:pointerover">
+            <Setter Property="Background" Value="#22FFFFFF" />
+        </Style>
+    </Window.Styles>
+
     <Border Background="#F21F1F23"
             CornerRadius="10"
             BorderBrush="#33FFFFFF"
             BorderThickness="1"
             BoxShadow="0 8 32 0 #66000000">
-        <TextBox Name="SearchBox"
-                 Text="{Binding SearchText}"
-                 PlaceholderText="Search..."
-                 BorderThickness="0"
-                 Background="Transparent"
-                 FontSize="24"
-                 Padding="18,16"
-                 CaretBrush="White"
-                 Foreground="White" />
+        <StackPanel>
+            <TextBox Name="SearchBox"
+                     Text="{Binding SearchText}"
+                     PlaceholderText="Search..."
+                     BorderThickness="0"
+                     Background="Transparent"
+                     FontSize="24"
+                     Padding="18,16"
+                     CaretBrush="White"
+                     Foreground="White" />
+
+            <Border Height="1"
+                    Margin="12,0"
+                    Background="#22FFFFFF"
+                    IsVisible="{Binding HasResults}" />
+
+            <ListBox ItemsSource="{Binding Results}"
+                     SelectedIndex="{Binding SelectedIndex}"
+                     IsVisible="{Binding HasResults}"
+                     Focusable="False"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     Margin="8,6">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:RunResult">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding Icon}"
+                                       FontSize="22"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,14,0" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Title}"
+                                           Foreground="White"
+                                           FontSize="15" />
+                                <TextBlock Text="{Binding Subtitle}"
+                                           Foreground="#99FFFFFF"
+                                           FontSize="12" />
+                            </StackPanel>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </StackPanel>
     </Border>
 
 </Window>

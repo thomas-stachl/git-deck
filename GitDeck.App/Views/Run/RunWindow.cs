@@ -28,6 +28,16 @@ public partial class RunWindow : Window
         Activate();
     }
 
+    public void HideAndReset()
+    {
+        Hide();
+
+        if (DataContext is RunViewModel viewModel)
+        {
+            viewModel.Reset();
+        }
+    }
+
     private void PositionNearTop()
     {
         var screen = Screens.ScreenFromPoint(Position) ?? Screens.Primary ?? Screens.All.FirstOrDefault();
@@ -52,14 +62,32 @@ public partial class RunWindow : Window
 
     private void OnDeactivated(object? sender, EventArgs e)
     {
-        Hide();
+        HideAndReset();
     }
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape)
+        if (DataContext is not RunViewModel viewModel)
         {
-            Hide();
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.Escape:
+                HideAndReset();
+                e.Handled = true;
+                break;
+
+            case Key.Down when viewModel.Results.Count > 0:
+                viewModel.SelectedIndex = (viewModel.SelectedIndex + 1) % viewModel.Results.Count;
+                e.Handled = true;
+                break;
+
+            case Key.Up when viewModel.Results.Count > 0:
+                viewModel.SelectedIndex = (viewModel.SelectedIndex - 1 + viewModel.Results.Count) % viewModel.Results.Count;
+                e.Handled = true;
+                break;
         }
     }
 }
