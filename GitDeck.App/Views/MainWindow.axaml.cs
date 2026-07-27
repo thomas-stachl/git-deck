@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 
-namespace GitDeck.Views;
+namespace GitDeck.App.Views;
 
 public partial class MainWindow : Window
 {

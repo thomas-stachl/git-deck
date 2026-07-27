@@ -1,10 +1,10 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
-using GitDeck.ViewModels;
-using GitDeck.Views;
+using GitDeck.App.ViewModels;
+using GitDeck.App.Views;
 
-namespace GitDeck;
+namespace GitDeck.App;
 
 public partial class App : Application
 {

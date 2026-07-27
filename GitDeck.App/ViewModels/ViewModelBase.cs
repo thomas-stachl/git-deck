@@ -1,6 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace GitDeck.ViewModels;
+namespace GitDeck.App.ViewModels;
 
 public abstract class ViewModelBase : ObservableObject
 {

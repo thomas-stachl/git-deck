@@ -1,7 +1,7 @@
 ﻿using Avalonia;
 using System;
 
-namespace GitDeck;
+namespace GitDeck.App;
 
 sealed class Program
 {
