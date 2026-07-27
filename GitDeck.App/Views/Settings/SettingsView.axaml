@@ -11,5 +11,6 @@
     <StackPanel>
         <TextBlock Text="{Binding Greeting}" />
         <Button Content="Click me" />
+        <Button Content="Open Run Window" Command="{Binding ToggleRunWindowCommand}" />
     </StackPanel>
 </UserControl>

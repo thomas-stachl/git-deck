@@ -1,0 +1,36 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:GitDeck.App.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="76"
+        x:Class="GitDeck.App.Views.Run.RunWindow"
+        x:DataType="vm:RunViewModel"
+        Width="640"
+        SizeToContent="Height"
+        CanResize="False"
+        ShowActivated="True"
+        ShowInTaskbar="False"
+        Topmost="True"
+        WindowStartupLocation="Manual"
+        WindowDecorations="None"
+        TransparencyLevelHint="AcrylicBlur, Blur, Transparent"
+        Background="Transparent">
+
+    <Border Background="#F21F1F23"
+            CornerRadius="10"
+            BorderBrush="#33FFFFFF"
+            BorderThickness="1"
+            BoxShadow="0 8 32 0 #66000000">
+        <TextBox Name="SearchBox"
+                 Text="{Binding SearchText}"
+                 PlaceholderText="Search..."
+                 BorderThickness="0"
+                 Background="Transparent"
+                 FontSize="24"
+                 Padding="18,16"
+                 CaretBrush="White"
+                 Foreground="White" />
+    </Border>
+
+</Window>

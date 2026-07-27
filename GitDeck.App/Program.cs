@@ -1,5 +1,7 @@
 ﻿using Avalonia;
+using GitDeck.App.Services;
 using GitDeck.App.ViewModels;
+using GitDeck.App.Views.Run;
 using GitDeck.App.Views.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using System;
@@ -37,6 +39,10 @@ sealed class Program
         services.AddSingleton<SettingsWindow>();
         services.AddSingleton<SettingsView>();
         services.AddSingleton<ViewLocator>();
+
+        services.AddSingleton<RunViewModel>();
+        services.AddSingleton<RunWindow>();
+        services.AddSingleton<RunWindowService>();
 
         return services.BuildServiceProvider();
     }

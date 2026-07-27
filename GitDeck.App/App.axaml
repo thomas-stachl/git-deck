@@ -14,7 +14,7 @@
             <TrayIcon Icon="/Assets/avalonia-logo.ico" ToolTipText="GitDeck">
                 <TrayIcon.Menu>
                     <NativeMenu>
-                        <NativeMenuItem Header="Show" Click="OnTrayShowClicked" />
+                        <NativeMenuItem Header="Settings" Click="OnTrayShowClicked" />
                         <NativeMenuItemSeparator />
                         <NativeMenuItem Header="Exit" Click="OnTrayExitClicked" />
                     </NativeMenu>
