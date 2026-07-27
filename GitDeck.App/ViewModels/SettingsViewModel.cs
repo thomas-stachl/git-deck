@@ -7,5 +7,5 @@ public partial class SettingsViewModel : ObservableObject
 {
     
     [ObservableProperty]
-    public partial string Greeting { get; set; }
+    public partial string Greeting { get; set; } = "Hello from GitDeck.App!";
 }

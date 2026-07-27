@@ -2,7 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
-using GitDeck.App.Views;
+using GitDeck.App.Views.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 
@@ -10,7 +10,7 @@ namespace GitDeck.App;
 
 public partial class App(IServiceProvider services) : Application
 {
-    private SettingsWindow? _mainWindow;
+    private SettingsWindow? _settingsWindow;
     private bool _isExitRequested;
 
 
@@ -27,15 +27,15 @@ public partial class App(IServiceProvider services) : Application
         {
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-            _mainWindow = services.GetRequiredService<SettingsWindow>();
+            _settingsWindow = services.GetRequiredService<SettingsWindow>();
 
-            _mainWindow.Closing += OnMainWindowClosing;
+            _settingsWindow.Closing += OnSettingsWindowClosing;
         }
 
         base.OnFrameworkInitializationCompleted();
     }
 
-    private void OnMainWindowClosing(object? sender, WindowClosingEventArgs e)
+    private void OnSettingsWindowClosing(object? sender, WindowClosingEventArgs e)
     {
         if (_isExitRequested)
         {
@@ -44,26 +44,26 @@ public partial class App(IServiceProvider services) : Application
 
         // Keep the process alive in the tray and hide the window on close.
         e.Cancel = true;
-        _mainWindow?.Hide();
+        _settingsWindow?.Hide();
     }
 
     private void OnTrayShowClicked(object? sender, EventArgs e)
     {
-        if (_mainWindow is null)
+        if (_settingsWindow is null)
         {
             return;
         }
 
-        _mainWindow.Show();
-        _mainWindow.WindowState = WindowState.Normal;
-        _mainWindow.Activate();
+        _settingsWindow.Show();
+        _settingsWindow.WindowState = WindowState.Normal;
+        _settingsWindow.Activate();
     }
 
     private void OnTrayExitClicked(object? sender, EventArgs e)
     {
         _isExitRequested = true;
 
-        _mainWindow?.Close();
+        _settingsWindow?.Close();
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {

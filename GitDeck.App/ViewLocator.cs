@@ -18,11 +18,18 @@ public class ViewLocator : IDataTemplate
         _services = services;
     }
 
-    public Control Build(object? param) => param switch
+    public Control Build(object? param) 
     {
-        SettingsViewModel => _services.GetRequiredService<SettingsWindow>(),
-        _ => throw new NotImplementedException($"No view registered for {param?.GetType().FullName ?? "null"}")
-    };
+        var view = param switch
+        {
+            SettingsViewModel => _services.GetRequiredService<SettingsView>(),
+            _ => throw new NotImplementedException($"No view registered for {param?.GetType().FullName ?? "null"}")
+        };
+    
+        view.DataContext = param;
+
+        return view;
+    }
 
     public bool Match(object? data)
     {
