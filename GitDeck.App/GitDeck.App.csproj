@@ -22,4 +22,8 @@
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GitDeck.Core\GitDeck.Core.csproj" />
+  </ItemGroup>
 </Project>
