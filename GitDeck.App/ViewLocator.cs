@@ -2,7 +2,7 @@ using System;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
-using GitDeck.App.Views;
+using GitDeck.App.Views.Settings;
 using GitDeck.App.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 
