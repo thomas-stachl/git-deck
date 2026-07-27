@@ -1,37 +1,31 @@
 using System;
-using System.Diagnostics.CodeAnalysis;
+using CommunityToolkit.Mvvm.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
+using GitDeck.App.Views;
 using GitDeck.App.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace GitDeck.App;
 
-/// <summary>
-/// Given a view model, returns the corresponding view if possible.
-/// </summary>
-[RequiresUnreferencedCode(
-    "Default implementation of ViewLocator involves reflection which may be trimmed away.",
-    Url = "https://docs.avaloniaui.net/docs/concepts/view-locator")]
+
 public class ViewLocator : IDataTemplate
 {
-    public Control? Build(object? param)
-    {
-        if (param is null)
-            return null;
-        
-        var name = param.GetType().FullName!.Replace("ViewModel", "View", StringComparison.Ordinal);
-        var type = Type.GetType(name);
+    private readonly IServiceProvider _services;
 
-        if (type != null)
-        {
-            return (Control)Activator.CreateInstance(type)!;
-        }
-        
-        return new TextBlock { Text = "Not Found: " + name };
+    public ViewLocator(IServiceProvider services)
+    {
+        _services = services;
     }
+
+    public Control Build(object? param) => param switch
+    {
+        SettingsViewModel => _services.GetRequiredService<SettingsWindow>(),
+        _ => throw new NotImplementedException($"No view registered for {param?.GetType().FullName ?? "null"}")
+    };
 
     public bool Match(object? data)
     {
-        return data is ViewModelBase;
+        return data is ObservableObject;
     }
 }

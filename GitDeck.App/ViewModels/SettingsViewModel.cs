@@ -3,7 +3,7 @@ using GitDeck.Core;
 
 namespace GitDeck.App.ViewModels;
 
-public partial class MainViewModel : ViewModelBase
+public partial class SettingsViewModel : ObservableObject
 {
     
     [ObservableProperty]

@@ -2,20 +2,23 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
-using GitDeck.App.ViewModels;
 using GitDeck.App.Views;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 
 namespace GitDeck.App;
 
-public partial class App : Application
+public partial class App(IServiceProvider services) : Application
 {
-    private MainWindow? _mainWindow;
+    private SettingsWindow? _mainWindow;
     private bool _isExitRequested;
+
 
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
+
+        DataTemplates.Add(services.GetRequiredService<ViewLocator>());
     }
 
     public override void OnFrameworkInitializationCompleted()
@@ -24,13 +27,9 @@ public partial class App : Application
         {
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-            _mainWindow = new MainWindow
-            {
-                DataContext = new MainViewModel(),
-            };
+            _mainWindow = services.GetRequiredService<SettingsWindow>();
 
             _mainWindow.Closing += OnMainWindowClosing;
-            desktop.MainWindow = _mainWindow;
         }
 
         base.OnFrameworkInitializationCompleted();
