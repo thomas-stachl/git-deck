@@ -1,0 +1,47 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- Default button matches VS Code's neutral "secondary button" look. -->
+  <Style Selector="Button">
+    <Setter Property="Background" Value="{DynamicResource GitdeckButtonSecondaryBackgroundBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource GitdeckButtonSecondaryForegroundBrush}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="2" />
+    <Setter Property="Padding" Value="14,5" />
+    <Setter Property="FontFamily" Value="{DynamicResource GitdeckFontFamily}" />
+    <Setter Property="FontSize" Value="{DynamicResource GitdeckFontSizeNormal}" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+
+  <Style Selector="Button:pointerover">
+    <Setter Property="Background" Value="{DynamicResource GitdeckButtonSecondaryBackgroundHoverBrush}" />
+  </Style>
+
+  <Style Selector="Button:pressed">
+    <Setter Property="Background" Value="{DynamicResource GitdeckButtonSecondaryBackgroundHoverBrush}" />
+  </Style>
+
+  <Style Selector="Button:focus-visible">
+    <Setter Property="BorderBrush" Value="{DynamicResource GitdeckFocusBorderBrush}" />
+  </Style>
+
+  <Style Selector="Button:disabled">
+    <Setter Property="Opacity" Value="0.5" />
+  </Style>
+
+  <!-- Classes="accent" for primary/call-to-action buttons, matching VS Code's blue button. -->
+  <Style Selector="Button.accent">
+    <Setter Property="Background" Value="{DynamicResource GitdeckButtonBackgroundBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource GitdeckButtonForegroundBrush}" />
+  </Style>
+
+  <Style Selector="Button.accent:pointerover">
+    <Setter Property="Background" Value="{DynamicResource GitdeckButtonBackgroundHoverBrush}" />
+  </Style>
+
+  <Style Selector="Button.accent:pressed">
+    <Setter Property="Background" Value="{DynamicResource GitdeckButtonBackgroundPressedBrush}" />
+  </Style>
+
+</Styles>

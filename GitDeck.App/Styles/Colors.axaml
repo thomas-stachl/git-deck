@@ -1,0 +1,61 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <ResourceDictionary.ThemeDictionaries>
+
+    <ResourceDictionary x:Key="Dark">
+      <SolidColorBrush x:Key="GitdeckBackgroundBrush" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="GitdeckForegroundBrush" Color="#CCCCCC" />
+      <SolidColorBrush x:Key="GitdeckMutedForegroundBrush" Color="#9D9D9D" />
+      <SolidColorBrush x:Key="GitdeckBorderBrush" Color="#454545" />
+
+      <SolidColorBrush x:Key="GitdeckInputBackgroundBrush" Color="#3C3C3C" />
+      <SolidColorBrush x:Key="GitdeckInputBorderBrush" Color="#3C3C3C" />
+      <SolidColorBrush x:Key="GitdeckInputPlaceholderBrush" Color="#A6A6A6" />
+      <SolidColorBrush x:Key="GitdeckFocusBorderBrush" Color="#007FD4" />
+
+      <SolidColorBrush x:Key="GitdeckButtonBackgroundBrush" Color="#0E639C" />
+      <SolidColorBrush x:Key="GitdeckButtonBackgroundHoverBrush" Color="#1177BB" />
+      <SolidColorBrush x:Key="GitdeckButtonBackgroundPressedBrush" Color="#0D5789" />
+      <SolidColorBrush x:Key="GitdeckButtonForegroundBrush" Color="#FFFFFF" />
+
+      <SolidColorBrush x:Key="GitdeckButtonSecondaryBackgroundBrush" Color="#3A3D41" />
+      <SolidColorBrush x:Key="GitdeckButtonSecondaryBackgroundHoverBrush" Color="#45494E" />
+      <SolidColorBrush x:Key="GitdeckButtonSecondaryForegroundBrush" Color="#CCCCCC" />
+
+      <SolidColorBrush x:Key="GitdeckListHoverBackgroundBrush" Color="#2A2D2E" />
+      <SolidColorBrush x:Key="GitdeckListSelectedBackgroundBrush" Color="#094771" />
+
+      <!-- VS Code's actual quick-input/widget panel color (not the near-black editor background). -->
+      <SolidColorBrush x:Key="GitdeckOverlayBackgroundBrush" Color="#F2252526" />
+    </ResourceDictionary>
+
+    <ResourceDictionary x:Key="Light">
+      <SolidColorBrush x:Key="GitdeckBackgroundBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="GitdeckForegroundBrush" Color="#3B3B3B" />
+      <SolidColorBrush x:Key="GitdeckMutedForegroundBrush" Color="#717171" />
+      <SolidColorBrush x:Key="GitdeckBorderBrush" Color="#C8C8C8" />
+
+      <SolidColorBrush x:Key="GitdeckInputBackgroundBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="GitdeckInputBorderBrush" Color="#CECECE" />
+      <SolidColorBrush x:Key="GitdeckInputPlaceholderBrush" Color="#767676" />
+      <SolidColorBrush x:Key="GitdeckFocusBorderBrush" Color="#0090F1" />
+
+      <SolidColorBrush x:Key="GitdeckButtonBackgroundBrush" Color="#007ACC" />
+      <SolidColorBrush x:Key="GitdeckButtonBackgroundHoverBrush" Color="#0062A3" />
+      <SolidColorBrush x:Key="GitdeckButtonBackgroundPressedBrush" Color="#005A94" />
+      <SolidColorBrush x:Key="GitdeckButtonForegroundBrush" Color="#FFFFFF" />
+
+      <SolidColorBrush x:Key="GitdeckButtonSecondaryBackgroundBrush" Color="#E1E1E1" />
+      <SolidColorBrush x:Key="GitdeckButtonSecondaryBackgroundHoverBrush" Color="#D0D0D0" />
+      <SolidColorBrush x:Key="GitdeckButtonSecondaryForegroundBrush" Color="#3B3B3B" />
+
+      <SolidColorBrush x:Key="GitdeckListHoverBackgroundBrush" Color="#E8E8E8" />
+      <SolidColorBrush x:Key="GitdeckListSelectedBackgroundBrush" Color="#CCE4F7" />
+
+      <SolidColorBrush x:Key="GitdeckOverlayBackgroundBrush" Color="#F2FFFFFF" />
+    </ResourceDictionary>
+
+  </ResourceDictionary.ThemeDictionaries>
+
+</ResourceDictionary>
