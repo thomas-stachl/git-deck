@@ -8,26 +8,39 @@ using System;
 
 namespace GitDeck.App;
 
-public partial class App(IServiceProvider services) : Application
+public partial class App : Application
 {
+    private readonly IServiceProvider? _services;
     private SettingsWindow? _settingsWindow;
     private bool _isExitRequested;
 
+    // Parameterless constructor required by the Avalonia XAML previewer/designer.
+    public App() : this(null)
+    {
+    }
+
+    public App(IServiceProvider? services)
+    {
+        _services = services;
+    }
 
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
 
-        DataTemplates.Add(services.GetRequiredService<ViewLocator>());
+        if (_services is not null)
+        {
+            DataTemplates.Add(_services.GetRequiredService<ViewLocator>());
+        }
     }
 
     public override void OnFrameworkInitializationCompleted()
     {
-        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        if (_services is not null && ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-            _settingsWindow = services.GetRequiredService<SettingsWindow>();
+            _settingsWindow = _services.GetRequiredService<SettingsWindow>();
 
             _settingsWindow.Closing += OnSettingsWindowClosing;
         }

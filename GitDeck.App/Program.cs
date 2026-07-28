@@ -33,6 +33,13 @@ sealed class Program
             .WithInterFont()
             .LogToTrace();
 
+    // Parameterless overload used by the Avalonia XAML previewer/designer.
+    public static AppBuilder BuildAvaloniaApp()
+        => AppBuilder.Configure(() => new App())
+            .UsePlatformDetect()
+            .WithInterFont()
+            .LogToTrace();
+
     private IServiceProvider ConfigureServices()
     {
         var services = new ServiceCollection();
@@ -44,11 +51,11 @@ sealed class Program
 
         services.AddSingleton<RunViewModel>();
         services.AddSingleton<RunWindow>();
-        services.AddSingleton<RunWindowService>();
+        services.AddSingleton<IRunWindowService, RunWindowService>();
 
-        services.AddSingleton<SettingsService>();
-        services.AddSingleton<FilePickerService>();
-        services.AddSingleton<GitExecutableService>();
+        services.AddSingleton<ISettingsService, SettingsService>();
+        services.AddSingleton<IFilePickerService, FilePickerService>();
+        services.AddSingleton<IGitExecutableService, GitExecutableService>();
 
         return services.BuildServiceProvider();
     }

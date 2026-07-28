@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GitDeck.App.Design;
 using GitDeck.App.Services;
 using GitDeck.Core.Settings;
 using GitDeck.Git;
@@ -8,11 +9,20 @@ using System.Threading.Tasks;
 namespace GitDeck.App.ViewModels;
 
 public partial class SettingsViewModel(
-    RunWindowService runWindowService,
-    SettingsService settingsService,
-    FilePickerService filePickerService,
-    GitExecutableService gitExecutableService) : ObservableObject
+    IRunWindowService runWindowService,
+    ISettingsService settingsService,
+    IFilePickerService filePickerService,
+    IGitExecutableService gitExecutableService) : ObservableObject
 {
+    // Parameterless constructor required by the Avalonia XAML previewer/designer;
+    // wires up hand-written fakes instead of the real services.
+    public SettingsViewModel() : this(
+        new DesignRunWindowService(),
+        new DesignSettingsService(),
+        new DesignFilePickerService(),
+        new DesignGitExecutableService())
+    {
+    }
 
     [ObservableProperty]
     public partial string Greeting { get; set; } = "Hello from GitDeck.App!";

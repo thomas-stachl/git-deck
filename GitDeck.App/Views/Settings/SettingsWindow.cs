@@ -5,9 +5,13 @@ namespace GitDeck.App.Views.Settings;
 
 public partial class SettingsWindow : Window
 {
-    public SettingsWindow(SettingsViewModel viewModel)
+    // Parameterless constructor required by the Avalonia XAML previewer/designer.
+    public SettingsWindow() : this(null)
     {
-        
+    }
+
+    public SettingsWindow(SettingsViewModel? viewModel)
+    {
         DataContext = viewModel;
 
         InitializeComponent();

@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace GitDeck.Core.Settings;
 
-public class SettingsService
+public class SettingsService : ISettingsService
 {
     private static readonly string SettingsFilePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),

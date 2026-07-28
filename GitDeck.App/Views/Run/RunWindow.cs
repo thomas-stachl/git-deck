@@ -9,7 +9,12 @@ namespace GitDeck.App.Views.Run;
 
 public partial class RunWindow : Window
 {
-    public RunWindow(RunViewModel viewModel)
+    // Parameterless constructor required by the Avalonia XAML previewer/designer.
+    public RunWindow() : this(null)
+    {
+    }
+
+    public RunWindow(RunViewModel? viewModel)
     {
         DataContext = viewModel;
 

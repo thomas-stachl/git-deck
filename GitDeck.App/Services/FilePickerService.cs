@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace GitDeck.App.Services;
 
-public class FilePickerService
+public class FilePickerService : IFilePickerService
 {
     public async Task<string?> PickFolderAsync(string title)
     {

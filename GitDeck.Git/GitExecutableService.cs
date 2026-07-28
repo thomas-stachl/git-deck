@@ -5,7 +5,7 @@ namespace GitDeck.Git;
 
 public sealed record GitAvailability(bool IsAvailable, string? Version);
 
-public class GitExecutableService
+public class GitExecutableService : IGitExecutableService
 {
     public async Task<GitAvailability> CheckAvailabilityAsync(string? gitPath = null, CancellationToken cancellationToken = default)
     {
