@@ -17,9 +17,23 @@
         TransparencyLevelHint="AcrylicBlur, Blur, Transparent"
         Background="Transparent">
 
-    <Border Background="{DynamicResource GitdeckOverlayBackgroundBrush}"
+    <Window.Styles>
+        <Style Selector="ListBoxItem">
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Margin" Value="0,1" />
+        </Style>
+        <Style Selector="ListBoxItem:selected">
+            <Setter Property="Background" Value="#33FFFFFF" />
+        </Style>
+        <Style Selector="ListBoxItem:pointerover">
+            <Setter Property="Background" Value="#22FFFFFF" />
+        </Style>
+    </Window.Styles>
+
+    <Border Background="#F21F1F23"
             CornerRadius="10"
-            BorderBrush="{DynamicResource GitdeckBorderBrush}"
+            BorderBrush="#33FFFFFF"
             BorderThickness="1"
             BoxShadow="0 8 32 0 #66000000">
         <StackPanel>
@@ -30,12 +44,12 @@
                      Background="Transparent"
                      FontSize="24"
                      Padding="18,16"
-                     CaretBrush="{DynamicResource GitdeckForegroundBrush}"
-                     Foreground="{DynamicResource GitdeckForegroundBrush}" />
+                     CaretBrush="White"
+                     Foreground="White" />
 
             <Border Height="1"
                     Margin="12,0"
-                    Background="{DynamicResource GitdeckBorderBrush}"
+                    Background="#22FFFFFF"
                     IsVisible="{Binding HasResults}" />
 
             <ListBox ItemsSource="{Binding Results}"
@@ -55,10 +69,10 @@
                                        Margin="0,0,14,0" />
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <TextBlock Text="{Binding Title}"
-                                           Foreground="{DynamicResource GitdeckForegroundBrush}"
+                                           Foreground="White"
                                            FontSize="15" />
                                 <TextBlock Text="{Binding Subtitle}"
-                                           Foreground="{DynamicResource GitdeckMutedForegroundBrush}"
+                                           Foreground="#99FFFFFF"
                                            FontSize="12" />
                             </StackPanel>
                         </Grid>

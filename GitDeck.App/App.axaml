@@ -7,7 +7,6 @@
 
     <Application.Styles>
         <FluentTheme />
-        <StyleInclude Source="avares://GitDeck.App/Styles/Theme.axaml" />
     </Application.Styles>
 
     <TrayIcon.Icons>
