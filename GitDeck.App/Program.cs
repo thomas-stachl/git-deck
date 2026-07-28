@@ -4,6 +4,7 @@ using GitDeck.App.ViewModels;
 using GitDeck.App.Views.Run;
 using GitDeck.App.Views.Settings;
 using GitDeck.Core.Settings;
+using GitDeck.Git;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 
@@ -46,7 +47,8 @@ sealed class Program
         services.AddSingleton<RunWindowService>();
 
         services.AddSingleton<SettingsService>();
-        services.AddSingleton<FolderPickerService>();
+        services.AddSingleton<FilePickerService>();
+        services.AddSingleton<GitExecutableService>();
 
         return services.BuildServiceProvider();
     }

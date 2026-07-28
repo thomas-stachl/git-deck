@@ -19,5 +19,17 @@
                     Command="{Binding BrowseRepositoryPathCommand}" />
             <TextBox Text="{Binding RepositoryPath}" PlaceholderText="No repository selected" />
         </DockPanel>
+
+        <TextBlock Text="Git Executable" FontWeight="Bold" Margin="0,16,0,0" />
+        <DockPanel>
+            <Button DockPanel.Dock="Right" Content="Browse..." Margin="8,0,0,0"
+                    Command="{Binding BrowseGitExecutablePathCommand}" />
+            <TextBox Text="{Binding GitExecutablePath}" PlaceholderText="Uses 'git' on PATH" />
+        </DockPanel>
+        <DockPanel>
+            <Button DockPanel.Dock="Right" Content="Check" Margin="8,0,0,0"
+                    Command="{Binding CheckGitAvailabilityCommand}" />
+            <TextBlock Text="{Binding GitStatus}" VerticalAlignment="Center" TextWrapping="Wrap" />
+        </DockPanel>
     </StackPanel>
 </UserControl>

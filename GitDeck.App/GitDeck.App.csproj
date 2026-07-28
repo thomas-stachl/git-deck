@@ -26,5 +26,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\GitDeck.Core\GitDeck.Core.csproj" />
+    <ProjectReference Include="..\GitDeck.Git\GitDeck.Git.csproj" />
   </ItemGroup>
 </Project>
