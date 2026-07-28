@@ -8,9 +8,16 @@
              to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
         <vm:SettingsViewModel />
     </Design.DataContext>
-    <StackPanel>
+    <StackPanel Spacing="8">
         <TextBlock Text="{Binding Greeting}" />
         <Button Content="Click me" />
         <Button Content="Open Run Window" Command="{Binding ToggleRunWindowCommand}" />
+
+        <TextBlock Text="Repository Path" FontWeight="Bold" Margin="0,16,0,0" />
+        <DockPanel>
+            <Button DockPanel.Dock="Right" Content="Browse..." Margin="8,0,0,0"
+                    Command="{Binding BrowseRepositoryPathCommand}" />
+            <TextBox Text="{Binding RepositoryPath}" PlaceholderText="No repository selected" />
+        </DockPanel>
     </StackPanel>
 </UserControl>
