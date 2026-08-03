@@ -39,7 +39,7 @@
         <StackPanel>
             <TextBox Name="SearchBox"
                      Text="{Binding SearchText}"
-                     PlaceholderText="Search..."
+                     PlaceholderText="Search branches..."
                      BorderThickness="0"
                      Background="Transparent"
                      FontSize="24"
@@ -50,7 +50,14 @@
             <Border Height="1"
                     Margin="12,0"
                     Background="#22FFFFFF"
-                    IsVisible="{Binding HasResults}" />
+                    IsVisible="{Binding HasSuggestionArea}" />
+
+            <TextBlock Text="{Binding StatusMessage}"
+                       IsVisible="{Binding HasStatusMessage}"
+                       Foreground="#99FFFFFF"
+                       FontSize="13"
+                       TextWrapping="Wrap"
+                       Margin="18,14" />
 
             <ListBox ItemsSource="{Binding Results}"
                      SelectedIndex="{Binding SelectedIndex}"

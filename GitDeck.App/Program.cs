@@ -5,6 +5,7 @@ using GitDeck.App.Views.Run;
 using GitDeck.App.Views.Settings;
 using GitDeck.Core.Settings;
 using GitDeck.Git;
+using GitDeck.Git.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 
@@ -56,6 +57,7 @@ sealed class Program
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<IFilePickerService, FilePickerService>();
         services.AddSingleton<IGitExecutableService, GitExecutableService>();
+        services.AddSingleton<IBranchService, BranchService>();
 
         return services.BuildServiceProvider();
     }

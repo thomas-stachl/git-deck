@@ -31,6 +31,11 @@ public partial class RunWindow : Window
 
         Show();
         Activate();
+
+        if (DataContext is RunViewModel viewModel)
+        {
+            _ = viewModel.LoadBranchesAsync();
+        }
     }
 
     public void HideAndReset()
