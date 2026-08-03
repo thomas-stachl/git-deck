@@ -10,9 +10,14 @@ public class AiSettings
     /// </summary>
     public bool IsEnabled { get; set; }
 
-    public AiProviderKind Provider { get; set; } = AiProviderKind.Anthropic;
+    /// <summary>
+    /// Claude Code by default: it needs no key and no model, so enabling generation on a machine that
+    /// has it just works. The generator reports plainly when it is absent.
+    /// </summary>
+    public AiProviderKind Provider { get; set; } = AiProviderKind.ClaudeCli;
 
-    public string Model { get; set; } = AiGenerationOptions.DefaultAnthropicModel;
+    /// <summary>Empty means the provider's own default — which is what Claude Code wants.</summary>
+    public string Model { get; set; } = string.Empty;
 
     /// <summary>
     /// Only used by OpenAI-compatible providers, and only when set — it should include the version

@@ -56,6 +56,7 @@ sealed class Program
         services.AddSingleton<IRunWindowService, RunWindowService>();
         services.AddSingleton<ISettingsWindowService, SettingsWindowService>();
 
+        services.AddSingleton<IProcessRunner, ProcessRunner>();
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<IFilePickerService, FilePickerService>();
         services.AddSingleton<IGitExecutableService, GitExecutableService>();

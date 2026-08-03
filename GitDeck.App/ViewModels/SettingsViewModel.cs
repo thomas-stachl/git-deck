@@ -85,7 +85,7 @@ public partial class SettingsViewModel : ObservableObject
     public partial bool IsAiEnabled { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsBaseUrlRelevant))]
+    [NotifyPropertyChangedFor(nameof(IsBaseUrlRelevant), nameof(IsApiKeyRelevant), nameof(AiProviderNote))]
     public partial AiProviderKind AiProvider { get; set; }
 
     [ObservableProperty]
@@ -104,10 +104,24 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     public partial string AiKeyStatus { get; set; } = string.Empty;
 
-    public AiProviderKind[] AiProviders { get; } = [AiProviderKind.Anthropic, AiProviderKind.OpenAiCompatible];
+    public AiProviderKind[] AiProviders { get; } =
+        [AiProviderKind.ClaudeCli, AiProviderKind.Anthropic, AiProviderKind.OpenAiCompatible];
 
     /// <summary>Anthropic's endpoint is fixed; only the OpenAI-compatible adapter takes a base URL.</summary>
     public bool IsBaseUrlRelevant => AiProvider is AiProviderKind.OpenAiCompatible;
+
+    /// <summary>Claude Code carries its own credentials, so it has no key to enter.</summary>
+    public bool IsApiKeyRelevant => AiProvider is not AiProviderKind.ClaudeCli;
+
+    /// <summary>Explains what the chosen provider needs — including whether it was actually found.</summary>
+    public string AiProviderNote => AiProvider switch
+    {
+        AiProviderKind.ClaudeCli => ClaudeCliLocator.Find() is { } path
+            ? $"Found at {path}. Already signed in, so no key or model is needed. Usage counts against your Claude Code plan."
+            : "Claude Code was not found on this machine. Install it, or pick another provider.",
+        AiProviderKind.Anthropic => "Uses Anthropic's API directly. Needs a key and API credit.",
+        _ => "Any OpenAI-compatible endpoint. Leave the key blank for a local provider such as Ollama.",
+    };
 
     [RelayCommand]
     private void OpenBranchPalette()
@@ -204,12 +218,16 @@ public partial class SettingsViewModel : ObservableObject
         var settings = _settingsService.Settings.Ai;
         settings.Provider = value;
 
-        // The model names are provider-specific, so carry the switch through to a working default
+        // Model names are provider-specific, so carry the switch through to something that works
         // rather than leaving an Anthropic model pointed at an OpenAI endpoint.
-        if (value is AiProviderKind.Anthropic && !AiModel.StartsWith("claude", StringComparison.OrdinalIgnoreCase))
+        AiModel = value switch
         {
-            AiModel = AiGenerationOptions.DefaultAnthropicModel;
-        }
+            // Claude Code uses whatever it is configured for; an empty box means "don't override".
+            AiProviderKind.ClaudeCli => string.Empty,
+            AiProviderKind.Anthropic when !AiModel.StartsWith("claude", StringComparison.OrdinalIgnoreCase)
+                => AiGenerationOptions.DefaultAnthropicModel,
+            _ => AiModel,
+        };
 
         _settingsService.Save();
         AiKeyStatus = DescribeKey();
@@ -246,6 +264,18 @@ public partial class SettingsViewModel : ObservableObject
         // Drop the plaintext from the box now that it is stored, so it is not left on screen.
         AiApiKey = string.Empty;
         AiKeyStatus = "Key saved, encrypted for this Windows account.";
+    }
+
+    /// <summary>Fills in a local Ollama, which needs no key and keeps the diff on this machine.</summary>
+    [RelayCommand]
+    private void UseOllamaPreset()
+    {
+        AiProvider = AiProviderKind.OpenAiCompatible;
+        AiBaseUrl = "http://localhost:11434/v1";
+        AiModel = "qwen2.5-coder";
+
+        ClearAiApiKey();
+        AiKeyStatus = "Pointed at a local Ollama. No key needed — pull the model with: ollama pull qwen2.5-coder";
     }
 
     [RelayCommand]

@@ -70,27 +70,41 @@
                       HorizontalAlignment="Stretch"
                       Margin="0,0,0,4" />
             <TextBlock Grid.Row="1" Grid.Column="0" Text="Model" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding AiModel}" />
+            <TextBox Grid.Row="1" Grid.Column="1"
+                     Text="{Binding AiModel}"
+                     PlaceholderText="Provider default" />
         </Grid>
+
+        <TextBlock Text="{Binding AiProviderNote}"
+                   Foreground="Gray"
+                   TextWrapping="Wrap" />
 
         <StackPanel Spacing="8" IsVisible="{Binding IsBaseUrlRelevant}" IsEnabled="{Binding IsAiEnabled}">
             <TextBox Text="{Binding AiBaseUrl}"
                      PlaceholderText="https://api.openai.com/v1" />
-            <TextBlock Text="Include the version path. Works with OpenAI, Azure OpenAI, OpenRouter, Groq, Mistral, and local Ollama or LM Studio (http://localhost:11434/v1)."
+            <TextBlock Text="Include the version path. Works with OpenAI, Azure OpenAI, OpenRouter, Groq, Mistral, and local Ollama or LM Studio."
                        Foreground="Gray"
                        TextWrapping="Wrap" />
         </StackPanel>
 
-        <DockPanel IsEnabled="{Binding IsAiEnabled}">
-            <Button DockPanel.Dock="Right" Content="Clear" Margin="8,0,0,0"
-                    Command="{Binding ClearAiApiKeyCommand}" />
-            <TextBox Text="{Binding AiApiKey}"
-                     PlaceholderText="Paste an API key to store it"
-                     PasswordChar="•" />
-        </DockPanel>
-        <TextBlock Text="{Binding AiKeyStatus}"
-                   Foreground="Gray"
-                   TextWrapping="Wrap" />
+        <!-- Claude Code carries its own credentials, so the key row is hidden for it entirely. -->
+        <StackPanel Spacing="8" IsVisible="{Binding IsApiKeyRelevant}" IsEnabled="{Binding IsAiEnabled}">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Clear" Margin="8,0,0,0"
+                        Command="{Binding ClearAiApiKeyCommand}" />
+                <TextBox Text="{Binding AiApiKey}"
+                         PlaceholderText="Paste an API key to store it"
+                         PasswordChar="•" />
+            </DockPanel>
+            <TextBlock Text="{Binding AiKeyStatus}"
+                       Foreground="Gray"
+                       TextWrapping="Wrap" />
+        </StackPanel>
+
+        <Button Content="Use local Ollama"
+                Command="{Binding UseOllamaPresetCommand}"
+                IsEnabled="{Binding IsAiEnabled}"
+                HorizontalAlignment="Left" />
 
         <TextBlock Text="Git Executable" FontWeight="Bold" Margin="0,16,0,0" />
         <DockPanel>

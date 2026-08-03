@@ -3,6 +3,12 @@ namespace GitDeck.Git.Generation;
 public enum AiProviderKind
 {
     /// <summary>
+    /// A locally installed Claude Code, driven headlessly. Already authenticated, so it needs no API
+    /// key and no configuration — the default when it is present on the machine.
+    /// </summary>
+    ClaudeCli,
+
+    /// <summary>
     /// Anything exposing OpenAI's <c>/chat/completions</c> shape: OpenAI, Azure OpenAI, Ollama,
     /// LM Studio, OpenRouter, Groq, Mistral. One adapter covers all of them; only the base URL,
     /// model and key differ.
