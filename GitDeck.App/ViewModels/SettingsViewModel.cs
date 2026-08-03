@@ -50,7 +50,7 @@ public partial class SettingsViewModel(
     [ObservableProperty]
     public partial string HotkeyStatus { get; set; } = Describe(globalHotkeyService.LastResult);
 
-    public string HotkeyDisplay => Hotkey?.ToString() ?? string.Empty;
+    public string HotkeyDisplay => Hotkey is { } hotkey ? Hotkeys.Format(hotkey) : string.Empty;
 
     [ObservableProperty]
     public partial string GitStatus { get; set; } = "Checking for Git...";

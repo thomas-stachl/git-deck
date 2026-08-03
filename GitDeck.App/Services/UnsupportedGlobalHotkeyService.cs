@@ -10,7 +10,9 @@ namespace GitDeck.App.Services;
 public sealed class UnsupportedGlobalHotkeyService : IGlobalHotkeyService
 {
     /// <summary>Never raised: nothing is listening to the keyboard on this platform.</summary>
+#pragma warning disable CS0067
     public event EventHandler? Pressed;
+#pragma warning restore CS0067
     public KeyGesture? Current { get; private set; }
 
     public HotkeyRegistration LastResult { get; private set; } = HotkeyRegistration.None;

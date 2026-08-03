@@ -59,7 +59,9 @@ sealed class Program
         services.AddSingleton<IGitExecutableService, GitExecutableService>();
         services.AddSingleton<IBranchService, BranchService>();
 
-        if (OperatingSystem.IsWindows())
+        // The version is what RegisterHotKey's platform annotation asks for; any Windows that can
+        // run .NET 10 satisfies it.
+        if (OperatingSystem.IsWindowsVersionAtLeast(6, 0, 6000))
         {
             services.AddSingleton<IGlobalHotkeyService, WindowsGlobalHotkeyService>();
         }

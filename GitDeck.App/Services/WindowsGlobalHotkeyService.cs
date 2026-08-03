@@ -4,6 +4,10 @@ using System;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Threading;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.UI.Input.KeyboardAndMouse;
+using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace GitDeck.App.Services;
 
@@ -16,25 +20,14 @@ namespace GitDeck.App.Services;
 /// it, and Avalonia's own loop does not surface those messages — so GitDeck runs a small loop of its
 /// own and marshals presses back to the UI thread.
 /// </remarks>
-[SupportedOSPlatform("windows")]
+[SupportedOSPlatform("windows6.0.6000")]
 public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposable
 {
-    private const uint WmHotkey = 0x0312;
-    private const uint WmApp = 0x8000;
-    private const uint WmApply = WmApp + 1;
-    private const uint WmStop = WmApp + 2;
-
-    private const uint PmNoRemove = 0x0000;
-
-    private const uint ModAlt = 0x0001;
-    private const uint ModControl = 0x0002;
-    private const uint ModShift = 0x0004;
-    private const uint ModWin = 0x0008;
+    private const uint WmApply = PInvoke.WM_APP + 1;
+    private const uint WmStop = PInvoke.WM_APP + 2;
 
     // Without this, holding the combination down repeats it as fast as the key repeat rate.
-    private const uint ModNoRepeat = 0x4000;
-
-    private const int ErrorHotkeyAlreadyRegistered = 1409;
+    private const HOT_KEY_MODIFIERS ModNoRepeat = (HOT_KEY_MODIFIERS)0x4000;
 
     private const int HotkeyId = 1;
 
@@ -82,7 +75,7 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
 
             if (_thread is not null)
             {
-                PostThreadMessage(_threadId, WmStop, UIntPtr.Zero, IntPtr.Zero);
+                PInvoke.PostThreadMessage(_threadId, WmStop, default, default);
                 _thread.Join(ApplyTimeout);
                 _thread = null;
             }
@@ -123,7 +116,7 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
 
         return request.IsRegistered
             ? HotkeyRegistration.Registered
-            : HotkeyRegistration.Failed(Describe(request.ErrorCode, hotkey));
+            : HotkeyRegistration.Failed(Describe(request.Error, hotkey));
     }
 
     /// <summary>
@@ -136,7 +129,7 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
 
         _pending = request;
 
-        if (!PostThreadMessage(_threadId, WmApply, UIntPtr.Zero, IntPtr.Zero))
+        if (!PInvoke.PostThreadMessage(_threadId, WmApply, default, default))
         {
             return null;
         }
@@ -163,20 +156,21 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
 
     private void RunMessageLoop()
     {
-        _threadId = GetCurrentThreadId();
+        _threadId = PInvoke.GetCurrentThreadId();
 
         // Force the message queue into existence before anyone posts to it.
-        PeekMessage(out _, IntPtr.Zero, 0, 0, PmNoRemove);
+        PInvoke.PeekMessage(out _, HWND.Null, 0, 0, PEEK_MESSAGE_REMOVE_TYPE.PM_NOREMOVE);
 
         _threadReady.Set();
 
         try
         {
-            while (GetMessage(out var message, IntPtr.Zero, 0, 0) > 0)
+            // GetMessage returns -1 on failure, so the raw value has to be compared, not the BOOL.
+            while (PInvoke.GetMessage(out var message, HWND.Null, 0, 0).Value > 0)
             {
-                switch (message.Value)
+                switch (message.message)
                 {
-                    case WmHotkey:
+                    case PInvoke.WM_HOTKEY:
                         Dispatcher.UIThread.Post(() => Pressed?.Invoke(this, EventArgs.Empty));
                         break;
 
@@ -191,7 +185,7 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
         }
         finally
         {
-            UnregisterHotKey(IntPtr.Zero, HotkeyId);
+            PInvoke.UnregisterHotKey(HWND.Null, HotkeyId);
         }
     }
 
@@ -204,7 +198,7 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
 
         _pending = null;
 
-        UnregisterHotKey(IntPtr.Zero, HotkeyId);
+        PInvoke.UnregisterHotKey(HWND.Null, HotkeyId);
 
         if (request.VirtualKey == 0)
         {
@@ -214,37 +208,37 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
             return;
         }
 
-        request.IsRegistered = RegisterHotKey(IntPtr.Zero, HotkeyId, request.Modifiers, request.VirtualKey);
-        request.ErrorCode = request.IsRegistered ? 0 : Marshal.GetLastWin32Error();
+        request.IsRegistered = PInvoke.RegisterHotKey(HWND.Null, HotkeyId, request.Modifiers, request.VirtualKey);
+        request.Error = request.IsRegistered ? WIN32_ERROR.NO_ERROR : (WIN32_ERROR)Marshal.GetLastPInvokeError();
         request.Completed.Set();
     }
 
-    private static string Describe(int errorCode, KeyGesture hotkey) => errorCode == ErrorHotkeyAlreadyRegistered
-        ? $"{hotkey} is already in use by another application. Pick a different combination."
-        : $"Windows refused the hotkey {hotkey} (error {errorCode}).";
+    private static string Describe(WIN32_ERROR error, KeyGesture hotkey) => error == WIN32_ERROR.ERROR_HOTKEY_ALREADY_REGISTERED
+        ? $"{Hotkeys.Format(hotkey)} is already in use by another application. Pick a different combination."
+        : $"Windows refused the hotkey {Hotkeys.Format(hotkey)} ({error}).";
 
-    private static uint ToModifiers(KeyModifiers modifiers)
+    private static HOT_KEY_MODIFIERS ToModifiers(KeyModifiers modifiers)
     {
-        var result = 0u;
+        var result = default(HOT_KEY_MODIFIERS);
 
         if (modifiers.HasFlag(KeyModifiers.Control))
         {
-            result |= ModControl;
+            result |= HOT_KEY_MODIFIERS.MOD_CONTROL;
         }
 
         if (modifiers.HasFlag(KeyModifiers.Alt))
         {
-            result |= ModAlt;
+            result |= HOT_KEY_MODIFIERS.MOD_ALT;
         }
 
         if (modifiers.HasFlag(KeyModifiers.Shift))
         {
-            result |= ModShift;
+            result |= HOT_KEY_MODIFIERS.MOD_SHIFT;
         }
 
         if (modifiers.HasFlag(KeyModifiers.Meta))
         {
-            result |= ModWin;
+            result |= HOT_KEY_MODIFIERS.MOD_WIN;
         }
 
         return result;
@@ -299,9 +293,9 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
         _ => null,
     };
 
-    private sealed class ApplyRequest(uint modifiers, uint virtualKey)
+    private sealed class ApplyRequest(HOT_KEY_MODIFIERS modifiers, uint virtualKey)
     {
-        public uint Modifiers { get; } = modifiers;
+        public HOT_KEY_MODIFIERS Modifiers { get; } = modifiers;
 
         public uint VirtualKey { get; } = virtualKey;
 
@@ -309,36 +303,6 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
 
         public bool IsRegistered { get; set; }
 
-        public int ErrorCode { get; set; }
+        public WIN32_ERROR Error { get; set; }
     }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct NativeMessage
-    {
-        public IntPtr Hwnd;
-        public uint Value;
-        public IntPtr WParam;
-        public IntPtr LParam;
-        public uint Time;
-        public int X;
-        public int Y;
-    }
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern int GetMessage(out NativeMessage message, IntPtr hWnd, uint filterMin, uint filterMax);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool PeekMessage(out NativeMessage message, IntPtr hWnd, uint filterMin, uint filterMax, uint removeMsg);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool PostThreadMessage(uint threadId, uint message, UIntPtr wParam, IntPtr lParam);
-
-    [DllImport("kernel32.dll")]
-    private static extern uint GetCurrentThreadId();
 }

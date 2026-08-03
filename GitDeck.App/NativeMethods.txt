@@ -1,0 +1,9 @@
+GetCurrentThreadId
+GetMessage
+PeekMessage
+PostThreadMessage
+RegisterHotKey
+UnregisterHotKey
+WIN32_ERROR
+WM_APP
+WM_HOTKEY
