@@ -12,3 +12,12 @@ public sealed record BranchInfo(string Name, bool IsRemote, string? RemoteName, 
             ? Name[(RemoteName.Length + 1)..]
             : Name;
 }
+
+/// <summary>
+/// The branches of a repository. <paramref name="IsRepository"/> separates "the configured path is
+/// not a repository" from "it is a repository that has no branches yet".
+/// </summary>
+public sealed record BranchListing(bool IsRepository, IReadOnlyList<BranchInfo> Branches)
+{
+    public static readonly BranchListing NotARepository = new(false, []);
+}

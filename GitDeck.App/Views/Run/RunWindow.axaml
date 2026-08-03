@@ -39,7 +39,8 @@
         <StackPanel>
             <TextBox Name="SearchBox"
                      Text="{Binding SearchText}"
-                     PlaceholderText="Search branches..."
+                     PlaceholderText="Search or create a branch..."
+                     IsEnabled="{Binding !IsBusy}"
                      BorderThickness="0"
                      Background="Transparent"
                      FontSize="24"

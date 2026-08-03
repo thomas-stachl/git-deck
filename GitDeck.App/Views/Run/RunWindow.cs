@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -72,7 +73,21 @@ public partial class RunWindow : Window
 
     private void OnDeactivated(object? sender, EventArgs e)
     {
+        // Losing focus mid-operation would hide the outcome; let it finish and report instead.
+        if (DataContext is RunViewModel { IsBusy: true })
+        {
+            return;
+        }
+
         HideAndReset();
+    }
+
+    private async Task ExecuteSelectedAsync(RunViewModel viewModel)
+    {
+        if (await viewModel.ExecuteSelectedAsync())
+        {
+            HideAndReset();
+        }
     }
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
@@ -86,6 +101,11 @@ public partial class RunWindow : Window
         {
             case Key.Escape:
                 HideAndReset();
+                e.Handled = true;
+                break;
+
+            case Key.Enter:
+                _ = ExecuteSelectedAsync(viewModel);
                 e.Handled = true;
                 break;
 

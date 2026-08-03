@@ -17,6 +17,14 @@ internal sealed class DesignBranchService : IBranchService
         new("origin/feature/settings-di", true, "origin", false),
     ];
 
-    public Task<IReadOnlyList<BranchInfo>> GetBranchesAsync(string? repositoryPath, CancellationToken cancellationToken = default)
-        => Task.FromResult<IReadOnlyList<BranchInfo>>(Branches);
+    public Task<BranchListing> GetBranchesAsync(string? repositoryPath, CancellationToken cancellationToken = default)
+        => Task.FromResult(new BranchListing(true, Branches));
+
+    public bool IsValidBranchName(string branchName) => !string.IsNullOrWhiteSpace(branchName);
+
+    public Task<CreateBranchResult> CreateBranchAsync(CreateBranchRequest request, CancellationToken cancellationToken = default)
+        => Task.FromResult(new CreateBranchResult(true, request.PublishToRemote, null));
+
+    public Task<SwitchBranchResult> SwitchBranchAsync(SwitchBranchRequest request, CancellationToken cancellationToken = default)
+        => Task.FromResult(new SwitchBranchResult(true, request.Branch.IsRemote, null));
 }

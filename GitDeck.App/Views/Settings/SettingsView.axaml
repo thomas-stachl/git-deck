@@ -18,6 +18,13 @@
             <TextBox Text="{Binding RepositoryPath}" PlaceholderText="No repository selected" />
         </DockPanel>
 
+        <TextBlock Text="Branches" FontWeight="Bold" Margin="0,16,0,0" />
+        <CheckBox IsChecked="{Binding PublishNewBranchesToRemote}"
+                  Content="Publish new branches to the remote" />
+        <TextBlock Text="Creating a branch always switches to it, like 'git switch -c'. With this on, it is also pushed to the remote and set as its upstream."
+                   Foreground="Gray"
+                   TextWrapping="Wrap" />
+
         <TextBlock Text="Git Executable" FontWeight="Bold" Margin="0,16,0,0" />
         <DockPanel>
             <Button DockPanel.Dock="Right" Content="Browse..." Margin="8,0,0,0"

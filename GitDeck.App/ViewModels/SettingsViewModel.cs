@@ -34,6 +34,9 @@ public partial class SettingsViewModel(
     public partial string? GitExecutablePath { get; set; } = settingsService.Settings.GitExecutablePath;
 
     [ObservableProperty]
+    public partial bool PublishNewBranchesToRemote { get; set; } = settingsService.Settings.PublishNewBranchesToRemote;
+
+    [ObservableProperty]
     public partial string GitStatus { get; set; } = "Checking for Git...";
 
     [RelayCommand]
@@ -76,6 +79,12 @@ public partial class SettingsViewModel(
     partial void OnRepositoryPathChanged(string? value)
     {
         settingsService.Settings.RepositoryPath = value;
+        settingsService.Save();
+    }
+
+    partial void OnPublishNewBranchesToRemoteChanged(bool value)
+    {
+        settingsService.Settings.PublishNewBranchesToRemote = value;
         settingsService.Save();
     }
 

@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
@@ -11,7 +10,16 @@ using GitDeck.Git.Repositories;
 
 namespace GitDeck.App.ViewModels;
 
-public sealed record RunResult(string Title, string Subtitle, string Icon, BranchInfo Branch);
+public enum RunResultKind
+{
+    /// <summary>An existing local or remote branch to switch to.</summary>
+    Branch,
+
+    /// <summary>Create a branch named after the entered text and switch to it.</summary>
+    CreateBranch,
+}
+
+public sealed record RunResult(RunResultKind Kind, string Title, string Subtitle, string Icon, string BranchName, BranchInfo? Branch = null);
 
 public partial class RunViewModel(ISettingsService settingsService, IBranchService branchService) : ObservableObject
 {
@@ -23,7 +31,7 @@ public partial class RunViewModel(ISettingsService settingsService, IBranchServi
     {
     }
 
-    private IReadOnlyList<BranchInfo> _branches = [];
+    private BranchListing _listing = BranchListing.NotARepository;
     private CancellationTokenSource? _loadCancellation;
 
     [ObservableProperty]
@@ -41,10 +49,14 @@ public partial class RunViewModel(ISettingsService settingsService, IBranchServi
     [NotifyPropertyChangedFor(nameof(SelectedResult))]
     public partial int SelectedIndex { get; set; } = -1;
 
-    /// <summary>Hint shown in place of the result list when a query matches nothing.</summary>
+    /// <summary>Hint or error shown in place of the result list.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasStatusMessage), nameof(HasSuggestionArea))]
     public partial string? StatusMessage { get; set; }
+
+    /// <summary>Set while a branch is being created, so Enter cannot start a second one.</summary>
+    [ObservableProperty]
+    public partial bool IsBusy { get; set; }
 
     public bool HasStatusMessage => StatusMessage is not null;
 
@@ -57,6 +69,7 @@ public partial class RunViewModel(ISettingsService settingsService, IBranchServi
     public void Reset()
     {
         SearchText = string.Empty;
+        StatusMessage = null;
     }
 
     /// <summary>
@@ -74,7 +87,7 @@ public partial class RunViewModel(ISettingsService settingsService, IBranchServi
 
         try
         {
-            _branches = await branchService.GetBranchesAsync(settingsService.Settings.RepositoryPath, cancellationToken);
+            _listing = await branchService.GetBranchesAsync(settingsService.Settings.RepositoryPath, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -87,10 +100,113 @@ public partial class RunViewModel(ISettingsService settingsService, IBranchServi
         }
     }
 
+    /// <summary>
+    /// Runs the highlighted suggestion. Returns whether the window should close, which happens only
+    /// when something was actually done — a failure stays open with the reason in
+    /// <see cref="StatusMessage"/>.
+    /// </summary>
+    public async Task<bool> ExecuteSelectedAsync()
+    {
+        if (IsBusy || SelectedResult is not { } result)
+        {
+            return false;
+        }
+
+        return result.Kind switch
+        {
+            RunResultKind.CreateBranch => await CreateBranchAsync(result),
+            RunResultKind.Branch => await SwitchBranchAsync(result),
+            _ => false,
+        };
+    }
+
+    private Task<bool> CreateBranchAsync(RunResult result)
+    {
+        var publish = settingsService.Settings.PublishNewBranchesToRemote;
+
+        var busyMessage = publish
+            ? $"Creating and publishing \"{result.BranchName}\"..."
+            : $"Creating \"{result.BranchName}\"...";
+
+        return RunOperationAsync(busyMessage, "Could not create the branch.", async () =>
+        {
+            var creation = await branchService.CreateBranchAsync(new CreateBranchRequest(
+                settingsService.Settings.RepositoryPath,
+                result.BranchName,
+                publish,
+                settingsService.Settings.GitExecutablePath));
+
+            return (creation.IsCreated, creation.ErrorMessage);
+        });
+    }
+
+    private Task<bool> SwitchBranchAsync(RunResult result)
+    {
+        if (result.Branch is not { } branch)
+        {
+            return Task.FromResult(false);
+        }
+
+        var busyMessage = branch.IsRemote
+            ? $"Checking out \"{branch.ShortName}\" from {branch.RemoteName ?? "the remote"}..."
+            : $"Switching to \"{branch.Name}\"...";
+
+        return RunOperationAsync(busyMessage, "Could not switch branches.", async () =>
+        {
+            var switched = await branchService.SwitchBranchAsync(
+                new SwitchBranchRequest(settingsService.Settings.RepositoryPath, branch));
+
+            return (switched.IsSwitched, switched.ErrorMessage);
+        });
+    }
+
+    /// <summary>
+    /// Shows <paramref name="busyMessage"/> while <paramref name="operation"/> runs, then either
+    /// reports success to the caller or leaves the window open with the reason it fell short.
+    /// </summary>
+    private async Task<bool> RunOperationAsync(
+        string busyMessage,
+        string fallbackErrorMessage,
+        Func<Task<(bool IsDone, string? ErrorMessage)>> operation)
+    {
+        IsBusy = true;
+        StatusMessage = busyMessage;
+        Results = [];
+        HasResults = false;
+        SelectedIndex = -1;
+
+        (bool IsDone, string? ErrorMessage) outcome;
+        try
+        {
+            outcome = await operation();
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
+        // Partial success — such as a branch created locally but not published — keeps the window
+        // open so the reason is visible.
+        if (outcome is { IsDone: true, ErrorMessage: null })
+        {
+            return true;
+        }
+
+        // Reload first: it rebuilds the results, and would otherwise clear the message below.
+        await LoadBranchesAsync();
+        StatusMessage = outcome.ErrorMessage ?? fallbackErrorMessage;
+        return false;
+    }
+
     partial void OnSearchTextChanged(string value) => UpdateResults(value);
 
     private void UpdateResults(string searchText)
     {
+        if (IsBusy)
+        {
+            return;
+        }
+
         var query = searchText.Trim();
 
         if (query.Length == 0)
@@ -102,7 +218,10 @@ public partial class RunViewModel(ISettingsService settingsService, IBranchServi
             return;
         }
 
-        var matches = _branches
+        var canCreate = CanCreateBranch(query);
+        var limit = canCreate ? MaxResults - 1 : MaxResults;
+
+        var results = _listing.Branches
             .Select(branch => (Branch: branch, Rank: Rank(branch, query)))
             .Where(match => match.Rank is not null)
             .OrderBy(match => match.Rank)
@@ -110,32 +229,70 @@ public partial class RunViewModel(ISettingsService settingsService, IBranchServi
             .ThenBy(match => match.Branch.IsRemote)
             .ThenBy(match => match.Branch.Name.Length)
             .ThenBy(match => match.Branch.Name, StringComparer.OrdinalIgnoreCase)
-            .Take(MaxResults)
-            .Select(match => ToResult(match.Branch));
+            .Take(limit)
+            .Select(match => ToResult(match.Branch))
+            .ToList();
 
-        Results = new ObservableCollection<RunResult>(matches);
+        if (canCreate)
+        {
+            results.Add(CreateBranchResultEntry(query));
+        }
+
+        Results = new ObservableCollection<RunResult>(results);
         HasResults = Results.Count > 0;
         SelectedIndex = HasResults ? 0 : -1;
-        StatusMessage = HasResults ? null : NoMatchMessage(query);
+        StatusMessage = HasResults ? null : NoResultsMessage(query);
     }
 
-    private string NoMatchMessage(string query) => _branches.Count == 0
-        ? "No branches found. Check the repository path in Settings."
-        : $"No branch matches \"{query}\".";
+    /// <summary>
+    /// Offer branch creation only when it could actually succeed: a real repository, a name git
+    /// accepts, and no local branch already using it.
+    /// </summary>
+    private bool CanCreateBranch(string query)
+    {
+        if (!_listing.IsRepository || !branchService.IsValidBranchName(query))
+        {
+            return false;
+        }
+
+        return !_listing.Branches.Any(branch =>
+            !branch.IsRemote && branch.Name.Equals(query, StringComparison.Ordinal));
+    }
+
+    private string NoResultsMessage(string query)
+    {
+        if (!_listing.IsRepository)
+        {
+            return "No repository found. Check the repository path in Settings.";
+        }
+
+        return branchService.IsValidBranchName(query)
+            ? $"No branch matches \"{query}\"."
+            : $"\"{query}\" is not a valid branch name.";
+    }
+
+    private RunResult CreateBranchResultEntry(string branchName)
+    {
+        var subtitle = settingsService.Settings.PublishNewBranchesToRemote
+            ? "Create branch · switch to it and publish to the remote"
+            : "Create branch · switch to it";
+
+        return new RunResult(RunResultKind.CreateBranch, branchName, subtitle, "✨", branchName);
+    }
 
     private static RunResult ToResult(BranchInfo branch)
     {
         var subtitle = branch switch
         {
-            { IsCurrent: true } => "Local branch · current",
-            { IsRemote: true, RemoteName: { } remote } => $"Remote branch · {remote}",
-            { IsRemote: true } => "Remote branch",
-            _ => "Local branch",
+            { IsCurrent: true } => "Local branch · already checked out",
+            { IsRemote: true, RemoteName: { } remote } => $"Remote branch · check out locally from {remote}",
+            { IsRemote: true } => "Remote branch · check out locally",
+            _ => "Local branch · switch to it",
         };
 
         var icon = branch.IsRemote ? "☁️" : "🌿";
 
-        return new RunResult(branch.Name, subtitle, icon, branch);
+        return new RunResult(RunResultKind.Branch, branch.Name, subtitle, icon, branch.Name, branch);
     }
 
     /// <summary>
