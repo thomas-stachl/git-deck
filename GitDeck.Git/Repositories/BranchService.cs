@@ -26,13 +26,12 @@ public sealed class BranchService : IBranchService
 
             using var repository = new LibGit2SharpRepository(gitDirectory);
 
-            return repository.Branches
+            return [.. repository.Branches
                 .Where(branch => !IsRemoteHead(branch))
                 .Select(ToBranchInfo)
                 .OrderByDescending(branch => branch.IsCurrent)
                 .ThenBy(branch => branch.IsRemote)
-                .ThenBy(branch => branch.Name, StringComparer.OrdinalIgnoreCase)
-                .ToList();
+                .ThenBy(branch => branch.Name, StringComparer.OrdinalIgnoreCase)];
         }
         catch (Exception ex) when (ex is LibGit2SharpException or IOException or UnauthorizedAccessException or ArgumentException)
         {
