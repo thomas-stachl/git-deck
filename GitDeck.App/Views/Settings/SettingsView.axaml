@@ -18,6 +18,20 @@
             <TextBox Text="{Binding RepositoryPath}" PlaceholderText="No repository selected" />
         </DockPanel>
 
+        <TextBlock Text="Hotkey" FontWeight="Bold" Margin="0,16,0,0" />
+        <DockPanel>
+            <Button DockPanel.Dock="Right" Content="Clear" Margin="8,0,0,0"
+                    Command="{Binding ClearHotkeyCommand}" />
+            <TextBox Name="HotkeyBox"
+                     Text="{Binding HotkeyDisplay, Mode=OneWay}"
+                     PlaceholderText="Click here and press a combination"
+                     IsReadOnly="True"
+                     KeyDown="OnHotkeyBoxKeyDown" />
+        </DockPanel>
+        <TextBlock Text="{Binding HotkeyStatus}"
+                   Foreground="Gray"
+                   TextWrapping="Wrap" />
+
         <TextBlock Text="Branches" FontWeight="Bold" Margin="0,16,0,0" />
         <CheckBox IsChecked="{Binding PublishNewBranchesToRemote}"
                   Content="Publish new branches to the remote" />

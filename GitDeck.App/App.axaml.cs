@@ -2,7 +2,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using GitDeck.App.Services;
 using GitDeck.App.Views.Settings;
+using GitDeck.Core.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 
@@ -40,12 +42,26 @@ public partial class App : Application
         {
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
+            // Register the hotkey before the settings window is built, so its view model starts
+            // from the real registration state.
+            RegisterGlobalHotkey(_services);
+
             _settingsWindow = _services.GetRequiredService<SettingsWindow>();
 
             _settingsWindow.Closing += OnSettingsWindowClosing;
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private static void RegisterGlobalHotkey(IServiceProvider services)
+    {
+        var hotkeyService = services.GetRequiredService<IGlobalHotkeyService>();
+        var settingsService = services.GetRequiredService<ISettingsService>();
+
+        hotkeyService.Pressed += (_, _) => services.GetRequiredService<IRunWindowService>().Toggle();
+
+        hotkeyService.Apply(Hotkeys.TryParse(settingsService.Settings.Hotkey));
     }
 
     private void OnSettingsWindowClosing(object? sender, WindowClosingEventArgs e)

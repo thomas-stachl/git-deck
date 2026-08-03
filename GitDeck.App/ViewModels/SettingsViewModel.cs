@@ -1,3 +1,4 @@
+using Avalonia.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GitDeck.App.Design;
@@ -12,7 +13,8 @@ public partial class SettingsViewModel(
     IRunWindowService runWindowService,
     ISettingsService settingsService,
     IFilePickerService filePickerService,
-    IGitExecutableService gitExecutableService) : ObservableObject
+    IGitExecutableService gitExecutableService,
+    IGlobalHotkeyService globalHotkeyService) : ObservableObject
 {
     // Parameterless constructor required by the Avalonia XAML previewer/designer;
     // wires up hand-written fakes instead of the real services.
@@ -20,7 +22,8 @@ public partial class SettingsViewModel(
         new DesignRunWindowService(),
         new DesignSettingsService(),
         new DesignFilePickerService(),
-        new DesignGitExecutableService())
+        new DesignGitExecutableService(),
+        new DesignGlobalHotkeyService())
     {
     }
 
@@ -36,6 +39,19 @@ public partial class SettingsViewModel(
     [ObservableProperty]
     public partial bool PublishNewBranchesToRemote { get; set; } = settingsService.Settings.PublishNewBranchesToRemote;
 
+    /// <summary>
+    /// The configured hotkey. Registration is applied at startup, so this starts from what the
+    /// hotkey service actually holds rather than re-reading the setting.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HotkeyDisplay))]
+    public partial KeyGesture? Hotkey { get; set; } = globalHotkeyService.Current;
+
+    [ObservableProperty]
+    public partial string HotkeyStatus { get; set; } = Describe(globalHotkeyService.LastResult);
+
+    public string HotkeyDisplay => Hotkey?.ToString() ?? string.Empty;
+
     [ObservableProperty]
     public partial string GitStatus { get; set; } = "Checking for Git...";
 
@@ -43,6 +59,27 @@ public partial class SettingsViewModel(
     private void ToggleRunWindow()
     {
         runWindowService.Toggle();
+    }
+
+    /// <summary>Called by the settings view when the user presses a combination in the capture box.</summary>
+    public void CaptureHotkey(KeyGesture gesture)
+    {
+        if (!Hotkeys.IsValid(gesture))
+        {
+            HotkeyStatus = Hotkeys.ModifierRequiredMessage;
+            return;
+        }
+
+        Hotkey = gesture;
+
+        // Re-registering the same gesture leaves Hotkey unchanged, so report the state either way.
+        HotkeyStatus = Describe(globalHotkeyService.LastResult);
+    }
+
+    [RelayCommand]
+    private void ClearHotkey()
+    {
+        Hotkey = null;
     }
 
     [RelayCommand]
@@ -81,6 +118,21 @@ public partial class SettingsViewModel(
         settingsService.Settings.RepositoryPath = value;
         settingsService.Save();
     }
+
+    partial void OnHotkeyChanged(KeyGesture? value)
+    {
+        settingsService.Settings.Hotkey = value?.ToString();
+        settingsService.Save();
+
+        HotkeyStatus = Describe(globalHotkeyService.Apply(value));
+    }
+
+    private static string Describe(HotkeyRegistration registration) => registration switch
+    {
+        { IsRegistered: true } => "Hotkey is active.",
+        { ErrorMessage: { } error } => error,
+        _ => "No hotkey set. Click the box above and press a combination.",
+    };
 
     partial void OnPublishNewBranchesToRemoteChanged(bool value)
     {

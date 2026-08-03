@@ -59,6 +59,15 @@ sealed class Program
         services.AddSingleton<IGitExecutableService, GitExecutableService>();
         services.AddSingleton<IBranchService, BranchService>();
 
+        if (OperatingSystem.IsWindows())
+        {
+            services.AddSingleton<IGlobalHotkeyService, WindowsGlobalHotkeyService>();
+        }
+        else
+        {
+            services.AddSingleton<IGlobalHotkeyService, UnsupportedGlobalHotkeyService>();
+        }
+
         return services.BuildServiceProvider();
     }
 }
