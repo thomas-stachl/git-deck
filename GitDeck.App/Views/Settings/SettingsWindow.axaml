@@ -6,7 +6,7 @@
         mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="300"
         x:Class="GitDeck.App.Views.Settings.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
-        Width="400" Height="300"
+        Width="800" Height="500"
         Icon="/Assets/avalonia-logo.ico"
         Title="GitDeck.App">
 

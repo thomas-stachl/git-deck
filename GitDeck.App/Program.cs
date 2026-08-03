@@ -53,6 +53,7 @@ sealed class Program
         services.AddSingleton<RunViewModel>();
         services.AddSingleton<RunWindow>();
         services.AddSingleton<IRunWindowService, RunWindowService>();
+        services.AddSingleton<ISettingsWindowService, SettingsWindowService>();
 
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<IFilePickerService, FilePickerService>();

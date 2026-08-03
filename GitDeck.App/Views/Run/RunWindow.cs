@@ -4,20 +4,25 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
+using GitDeck.App.Services;
 using GitDeck.App.ViewModels;
 
 namespace GitDeck.App.Views.Run;
 
 public partial class RunWindow : Window
 {
+    private readonly ISettingsWindowService? _settingsWindowService;
+
     // Parameterless constructor required by the Avalonia XAML previewer/designer.
-    public RunWindow() : this(null)
+    public RunWindow() : this(null, null)
     {
     }
 
-    public RunWindow(RunViewModel? viewModel)
+    public RunWindow(RunViewModel? viewModel, ISettingsWindowService? settingsWindowService)
     {
         DataContext = viewModel;
+        _settingsWindowService = settingsWindowService;
 
         InitializeComponent();
 
@@ -80,6 +85,14 @@ public partial class RunWindow : Window
         }
 
         HideAndReset();
+    }
+
+    private void OnSettingsClick(object? sender, RoutedEventArgs e)
+    {
+        // Dismiss the palette first so settings comes up in front of it, not behind.
+        HideAndReset();
+
+        _settingsWindowService?.Show();
     }
 
     private async Task ExecuteSelectedAsync(RunViewModel viewModel)

@@ -78,14 +78,7 @@ public partial class App : Application
 
     private void OnTrayShowClicked(object? sender, EventArgs e)
     {
-        if (_settingsWindow is null)
-        {
-            return;
-        }
-
-        _settingsWindow.Show();
-        _settingsWindow.WindowState = WindowState.Normal;
-        _settingsWindow.Activate();
+        _services?.GetRequiredService<ISettingsWindowService>().Show();
     }
 
     private void OnTrayExitClicked(object? sender, EventArgs e)

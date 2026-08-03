@@ -64,10 +64,6 @@ public partial class RunViewModel(ISettingsService settingsService, IBranchServi
     [ObservableProperty]
     public partial bool IsBusy { get; set; }
 
-    /// <summary>Whether the footer has a repository to describe.</summary>
-    [ObservableProperty]
-    public partial bool HasRepositoryInfo { get; set; }
-
     /// <summary>The repository path, shortened from the front when it is too long to fit.</summary>
     [ObservableProperty]
     public partial string RepositoryPathDisplay { get; set; } = string.Empty;
@@ -141,23 +137,35 @@ public partial class RunViewModel(ISettingsService settingsService, IBranchServi
 
         var configuredPath = settingsService.Settings.RepositoryPath;
 
-        HasRepositoryInfo = !string.IsNullOrWhiteSpace(configuredPath);
-        RepositoryPathDisplay = ShortenPath(configuredPath);
+        RepositoryPathDisplay = string.IsNullOrWhiteSpace(configuredPath)
+            ? "No repository configured"
+            : ShortenPath(configuredPath);
         HeadDisplay = string.Empty;
         ChangesDisplay = string.Empty;
     }
 
     private void UpdateRepositoryInfo()
     {
-        HasRepositoryInfo = _repository.IsRepository;
-        RepositoryPathDisplay = ShortenPath(_repository.WorkingDirectory);
-        HeadDisplay = _repository.Head ?? string.Empty;
-        ChangesDisplay = _repository.ChangedFileCount switch
+        RepositoryPathDisplay = _repository switch
         {
-            0 => "no changes",
-            1 => "1 changed file",
-            var count => $"{count} changed files",
+            // A bare repository is still a repository, it just has no working tree to name.
+            { IsRepository: true, WorkingDirectory: { } directory } => ShortenPath(directory),
+            { IsRepository: true } => ShortenPath(settingsService.Settings.RepositoryPath),
+            _ when string.IsNullOrWhiteSpace(settingsService.Settings.RepositoryPath) => "No repository configured",
+            _ => "Not a Git repository",
         };
+
+        HeadDisplay = _repository.Head ?? string.Empty;
+
+        // "no changes" would read as a fact about a repository that is not there.
+        ChangesDisplay = !_repository.IsRepository
+            ? string.Empty
+            : _repository.ChangedFileCount switch
+            {
+                0 => "no changes",
+                1 => "1 changed file",
+                var count => $"{count} changed files",
+            };
     }
 
     /// <summary>
