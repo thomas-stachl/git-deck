@@ -1,6 +1,8 @@
 using Avalonia.Input;
 using Avalonia.Threading;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Threading;
@@ -12,10 +14,10 @@ using Windows.Win32.UI.WindowsAndMessaging;
 namespace GitDeck.App.Services;
 
 /// <summary>
-/// Registers a system-wide hotkey through Win32 <c>RegisterHotKey</c>.
+/// Registers GitDeck's system-wide hotkeys through Win32 <c>RegisterHotKey</c>.
 /// </summary>
 /// <remarks>
-/// The registration lives on a dedicated thread with its own message loop. <c>RegisterHotKey</c>
+/// The registrations live on a dedicated thread with its own message loop. <c>RegisterHotKey</c>
 /// with a null window delivers <c>WM_HOTKEY</c> to the message queue of the thread that registered
 /// it, and Avalonia's own loop does not surface those messages — so GitDeck runs a small loop of its
 /// own and marshals presses back to the UI thread.
@@ -29,25 +31,37 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
     // Without this, holding the combination down repeats it as fast as the key repeat rate.
     private const HOT_KEY_MODIFIERS ModNoRepeat = (HOT_KEY_MODIFIERS)0x4000;
 
-    private const int HotkeyId = 1;
-
     private static readonly TimeSpan ApplyTimeout = TimeSpan.FromSeconds(5);
 
     private readonly object _gate = new();
     private readonly ManualResetEventSlim _threadReady = new(false);
+    private readonly Dictionary<HotkeyAction, KeyGesture?> _hotkeys = [];
+    private readonly Dictionary<HotkeyAction, HotkeyRegistration> _results = [];
 
     private Thread? _thread;
     private uint _threadId;
     private ApplyRequest? _pending;
     private bool _isDisposed;
 
-    public event EventHandler? Pressed;
+    public event EventHandler<HotkeyPressedEventArgs>? Pressed;
 
-    public KeyGesture? Current { get; private set; }
+    public KeyGesture? GetHotkey(HotkeyAction action)
+    {
+        lock (_gate)
+        {
+            return _hotkeys.GetValueOrDefault(action);
+        }
+    }
 
-    public HotkeyRegistration LastResult { get; private set; } = HotkeyRegistration.None;
+    public HotkeyRegistration GetLastResult(HotkeyAction action)
+    {
+        lock (_gate)
+        {
+            return _results.GetValueOrDefault(action, HotkeyRegistration.None);
+        }
+    }
 
-    public HotkeyRegistration Apply(KeyGesture? hotkey)
+    public HotkeyRegistration Apply(HotkeyAction action, KeyGesture? hotkey)
     {
         lock (_gate)
         {
@@ -55,10 +69,12 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
 
             // Keep the configured gesture even when registering it fails, so Settings still shows
             // what the user chose alongside the reason it is not active.
-            Current = hotkey;
-            LastResult = ApplyCore(hotkey);
+            _hotkeys[action] = hotkey;
 
-            return LastResult;
+            var result = ApplyCore(action, hotkey);
+            _results[action] = result;
+
+            return result;
         }
     }
 
@@ -84,14 +100,16 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
         _threadReady.Dispose();
     }
 
-    private HotkeyRegistration ApplyCore(KeyGesture? hotkey)
+    private HotkeyRegistration ApplyCore(HotkeyAction action, KeyGesture? hotkey)
     {
+        var hotkeyId = ToHotkeyId(action);
+
         if (hotkey is null)
         {
             // Nothing to register, but a previous registration still has to be released.
             if (_thread is not null)
             {
-                Send(new ApplyRequest(0, 0));
+                Send(new ApplyRequest(hotkeyId, 0, 0));
             }
 
             return HotkeyRegistration.None;
@@ -102,12 +120,19 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
             return HotkeyRegistration.Failed(Hotkeys.ModifierRequiredMessage);
         }
 
+        // Windows would reject the duplicate anyway, but with a message blaming another application.
+        if (FindConflict(action, hotkey) is { } conflict)
+        {
+            return HotkeyRegistration.Failed(
+                $"{Hotkeys.Format(hotkey)} is already used for {Hotkeys.Describe(conflict)}.");
+        }
+
         if (ToVirtualKey(hotkey.Key) is not { } virtualKey)
         {
             return HotkeyRegistration.Failed($"The key \"{hotkey.Key}\" cannot be used in a global hotkey.");
         }
 
-        var request = Send(new ApplyRequest(ToModifiers(hotkey.KeyModifiers) | ModNoRepeat, virtualKey));
+        var request = Send(new ApplyRequest(hotkeyId, ToModifiers(hotkey.KeyModifiers) | ModNoRepeat, virtualKey));
 
         if (request is null)
         {
@@ -118,6 +143,11 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
             ? HotkeyRegistration.Registered
             : HotkeyRegistration.Failed(Describe(request.Error, hotkey));
     }
+
+    private HotkeyAction? FindConflict(HotkeyAction action, KeyGesture hotkey) => _hotkeys
+        .Where(entry => entry.Key != action && hotkey.Equals(entry.Value))
+        .Select(entry => (HotkeyAction?)entry.Key)
+        .FirstOrDefault();
 
     /// <summary>
     /// Hands a request to the message-loop thread and waits for it, since only that thread may own
@@ -146,7 +176,7 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
 
         _thread = new Thread(RunMessageLoop)
         {
-            Name = "GitDeck global hotkey",
+            Name = "GitDeck global hotkeys",
             IsBackground = true,
         };
 
@@ -163,19 +193,22 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
 
         _threadReady.Set();
 
+        var registeredIds = new List<int>();
+
         try
         {
             // GetMessage returns -1 on failure, so the raw value has to be compared, not the BOOL.
-            while (PInvoke.GetMessage(out var message, HWND.Null, 0, 0).Value > 0)
+            while (PInvoke.GetMessage(out var native, HWND.Null, 0, 0).Value > 0)
             {
-                switch (message.message)
+                switch (native.message)
                 {
                     case PInvoke.WM_HOTKEY:
-                        Dispatcher.UIThread.Post(() => Pressed?.Invoke(this, EventArgs.Empty));
+                        // WM_HOTKEY carries the id that was registered in wParam.
+                        OnHotkeyMessage((int)native.wParam.Value);
                         break;
 
                     case WmApply:
-                        ApplyPending();
+                        ApplyPending(registeredIds);
                         break;
 
                     case WmStop:
@@ -185,11 +218,29 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
         }
         finally
         {
-            PInvoke.UnregisterHotKey(HWND.Null, HotkeyId);
+            foreach (var hotkeyId in registeredIds)
+            {
+                PInvoke.UnregisterHotKey(HWND.Null, hotkeyId);
+            }
         }
     }
 
-    private void ApplyPending()
+    /// <remarks>
+    /// Deliberately takes no lock. This runs on the message-loop thread, which is the same thread
+    /// <see cref="Apply"/> is blocked waiting on while holding <c>_gate</c> — reaching for the lock
+    /// here would stall that registration until it times out.
+    /// </remarks>
+    private void OnHotkeyMessage(int hotkeyId)
+    {
+        if (FromHotkeyId(hotkeyId) is not { } action)
+        {
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() => Pressed?.Invoke(this, new HotkeyPressedEventArgs(action)));
+    }
+
+    private void ApplyPending(List<int> registeredIds)
     {
         if (_pending is not { } request)
         {
@@ -198,7 +249,8 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
 
         _pending = null;
 
-        PInvoke.UnregisterHotKey(HWND.Null, HotkeyId);
+        PInvoke.UnregisterHotKey(HWND.Null, request.HotkeyId);
+        registeredIds.Remove(request.HotkeyId);
 
         if (request.VirtualKey == 0)
         {
@@ -208,9 +260,26 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
             return;
         }
 
-        request.IsRegistered = PInvoke.RegisterHotKey(HWND.Null, HotkeyId, request.Modifiers, request.VirtualKey);
+        request.IsRegistered = PInvoke.RegisterHotKey(HWND.Null, request.HotkeyId, request.Modifiers, request.VirtualKey);
         request.Error = request.IsRegistered ? WIN32_ERROR.NO_ERROR : (WIN32_ERROR)Marshal.GetLastPInvokeError();
+
+        if (request.IsRegistered)
+        {
+            registeredIds.Add(request.HotkeyId);
+        }
+
         request.Completed.Set();
+    }
+
+    // Win32 hotkey ids are per-thread and arbitrary; one per action keeps them independent, and
+    // deriving them means a WM_HOTKEY can be mapped back without consulting shared state.
+    private static int ToHotkeyId(HotkeyAction action) => 1 + (int)action;
+
+    private static HotkeyAction? FromHotkeyId(int hotkeyId)
+    {
+        var action = (HotkeyAction)(hotkeyId - 1);
+
+        return Enum.IsDefined(action) ? action : null;
     }
 
     private static string Describe(WIN32_ERROR error, KeyGesture hotkey) => error == WIN32_ERROR.ERROR_HOTKEY_ALREADY_REGISTERED
@@ -293,8 +362,10 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
         _ => null,
     };
 
-    private sealed class ApplyRequest(HOT_KEY_MODIFIERS modifiers, uint virtualKey)
+    private sealed class ApplyRequest(int hotkeyId, HOT_KEY_MODIFIERS modifiers, uint virtualKey)
     {
+        public int HotkeyId { get; } = hotkeyId;
+
         public HOT_KEY_MODIFIERS Modifiers { get; } = modifiers;
 
         public uint VirtualKey { get; } = virtualKey;

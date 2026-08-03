@@ -29,7 +29,9 @@ public partial class SettingsView : UserControl
     /// </summary>
     private void OnHotkeyBoxKeyDown(object? sender, KeyEventArgs e)
     {
-        if (DataContext is not SettingsViewModel viewModel)
+        // Which hotkey is being edited comes from the box's own data context, so both rows share
+        // this handler.
+        if ((sender as Control)?.DataContext is not HotkeyEditorViewModel editor)
         {
             return;
         }
@@ -48,6 +50,6 @@ public partial class SettingsView : UserControl
             return;
         }
 
-        viewModel.CaptureHotkey(new KeyGesture(e.Key, e.KeyModifiers));
+        editor.Capture(new KeyGesture(e.Key, e.KeyModifiers));
     }
 }

@@ -7,12 +7,19 @@ public class AppSettings
     public string? GitExecutablePath { get; set; }
 
     /// <summary>
-    /// The system-wide hotkey that shows the run window, as a gesture such as "Ctrl+Alt+G".
-    /// Null means no hotkey. Absent from settings.json means the default below.
+    /// The system-wide hotkey that opens the run window for switching branches, as a gesture such as
+    /// "Ctrl+Alt+G". Null means no hotkey. Absent from settings.json means the default below.
     /// </summary>
-    public string? Hotkey { get; set; } = DefaultHotkey;
+    public string? BranchHotkey { get; set; } = DefaultBranchHotkey;
 
-    public const string DefaultHotkey = "Ctrl+Alt+G";
+    /// <summary>
+    /// The system-wide hotkey that opens the run window for committing changes.
+    /// </summary>
+    public string? CommitHotkey { get; set; } = DefaultCommitHotkey;
+
+    public const string DefaultBranchHotkey = "Ctrl+Alt+G";
+
+    public const string DefaultCommitHotkey = "Ctrl+Alt+C";
 
     /// <summary>
     /// When set, creating a branch also pushes it to the remote and sets it as upstream

@@ -9,13 +9,35 @@ using System.Threading.Tasks;
 
 namespace GitDeck.App.ViewModels;
 
-public partial class SettingsViewModel(
-    IRunWindowService runWindowService,
-    ISettingsService settingsService,
-    IFilePickerService filePickerService,
-    IGitExecutableService gitExecutableService,
-    IGlobalHotkeyService globalHotkeyService) : ObservableObject
+public partial class SettingsViewModel : ObservableObject
 {
+    private readonly IRunWindowService _runWindowService;
+    private readonly ISettingsService _settingsService;
+    private readonly IFilePickerService _filePickerService;
+    private readonly IGitExecutableService _gitExecutableService;
+
+    public SettingsViewModel(
+        IRunWindowService runWindowService,
+        ISettingsService settingsService,
+        IFilePickerService filePickerService,
+        IGitExecutableService gitExecutableService,
+        IGlobalHotkeyService globalHotkeyService)
+    {
+        _runWindowService = runWindowService;
+        _settingsService = settingsService;
+        _filePickerService = filePickerService;
+        _gitExecutableService = gitExecutableService;
+
+        RepositoryPath = settingsService.Settings.RepositoryPath;
+        GitExecutablePath = settingsService.Settings.GitExecutablePath;
+        PublishNewBranchesToRemote = settingsService.Settings.PublishNewBranchesToRemote;
+
+        // The hotkeys are registered at startup, so the editors start from what the hotkey service
+        // actually holds rather than re-reading the settings.
+        BranchHotkey = CreateEditor(globalHotkeyService, HotkeyAction.Branches, "Switch branches");
+        CommitHotkey = CreateEditor(globalHotkeyService, HotkeyAction.Commit, "Commit changes");
+    }
+
     // Parameterless constructor required by the Avalonia XAML previewer/designer;
     // wires up hand-written fakes instead of the real services.
     public SettingsViewModel() : this(
@@ -27,65 +49,41 @@ public partial class SettingsViewModel(
     {
     }
 
+    public HotkeyEditorViewModel BranchHotkey { get; }
+
+    public HotkeyEditorViewModel CommitHotkey { get; }
+
     [ObservableProperty]
     public partial string Greeting { get; set; } = "Hello from GitDeck.App!";
 
     [ObservableProperty]
-    public partial string? RepositoryPath { get; set; } = settingsService.Settings.RepositoryPath;
+    public partial string? RepositoryPath { get; set; }
 
     [ObservableProperty]
-    public partial string? GitExecutablePath { get; set; } = settingsService.Settings.GitExecutablePath;
+    public partial string? GitExecutablePath { get; set; }
 
     [ObservableProperty]
-    public partial bool PublishNewBranchesToRemote { get; set; } = settingsService.Settings.PublishNewBranchesToRemote;
-
-    /// <summary>
-    /// The configured hotkey. Registration is applied at startup, so this starts from what the
-    /// hotkey service actually holds rather than re-reading the setting.
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HotkeyDisplay))]
-    public partial KeyGesture? Hotkey { get; set; } = globalHotkeyService.Current;
-
-    [ObservableProperty]
-    public partial string HotkeyStatus { get; set; } = Describe(globalHotkeyService.LastResult);
-
-    public string HotkeyDisplay => Hotkey is { } hotkey ? Hotkeys.Format(hotkey) : string.Empty;
+    public partial bool PublishNewBranchesToRemote { get; set; }
 
     [ObservableProperty]
     public partial string GitStatus { get; set; } = "Checking for Git...";
 
     [RelayCommand]
-    private void ToggleRunWindow()
+    private void OpenBranchPalette()
     {
-        runWindowService.Toggle();
-    }
-
-    /// <summary>Called by the settings view when the user presses a combination in the capture box.</summary>
-    public void CaptureHotkey(KeyGesture gesture)
-    {
-        if (!Hotkeys.IsValid(gesture))
-        {
-            HotkeyStatus = Hotkeys.ModifierRequiredMessage;
-            return;
-        }
-
-        Hotkey = gesture;
-
-        // Re-registering the same gesture leaves Hotkey unchanged, so report the state either way.
-        HotkeyStatus = Describe(globalHotkeyService.LastResult);
+        _runWindowService.Toggle(RunMode.Branches);
     }
 
     [RelayCommand]
-    private void ClearHotkey()
+    private void OpenCommitPalette()
     {
-        Hotkey = null;
+        _runWindowService.Toggle(RunMode.Commit);
     }
 
     [RelayCommand]
     private async Task BrowseRepositoryPathAsync()
     {
-        var path = await filePickerService.PickFolderAsync("Select Repository Folder");
+        var path = await _filePickerService.PickFolderAsync("Select Repository Folder");
         if (path is not null)
         {
             RepositoryPath = path;
@@ -95,7 +93,7 @@ public partial class SettingsViewModel(
     [RelayCommand]
     private async Task BrowseGitExecutablePathAsync()
     {
-        var path = await filePickerService.PickFileAsync("Select Git Executable");
+        var path = await _filePickerService.PickFileAsync("Select Git Executable");
         if (path is not null)
         {
             GitExecutablePath = path;
@@ -107,43 +105,57 @@ public partial class SettingsViewModel(
     {
         GitStatus = "Checking for Git...";
 
-        var availability = await gitExecutableService.CheckAvailabilityAsync(GitExecutablePath);
+        var availability = await _gitExecutableService.CheckAvailabilityAsync(GitExecutablePath);
         GitStatus = availability.IsAvailable
             ? $"Found: {availability.Version}"
             : "Git not found. Set the path below or install Git and ensure it's on PATH.";
     }
 
+    private HotkeyEditorViewModel CreateEditor(IGlobalHotkeyService hotkeyService, HotkeyAction action, string label) =>
+        new(label,
+            hotkeyService.GetHotkey(action),
+            hotkeyService.GetLastResult(action),
+            gesture =>
+            {
+                Persist(action, gesture);
+                return hotkeyService.Apply(action, gesture);
+            });
+
+    private void Persist(HotkeyAction action, KeyGesture? gesture)
+    {
+        // The stored form is KeyGesture.ToString(), which is what Hotkeys.TryParse reads back.
+        var stored = gesture?.ToString();
+
+        switch (action)
+        {
+            case HotkeyAction.Branches:
+                _settingsService.Settings.BranchHotkey = stored;
+                break;
+
+            case HotkeyAction.Commit:
+                _settingsService.Settings.CommitHotkey = stored;
+                break;
+        }
+
+        _settingsService.Save();
+    }
+
     partial void OnRepositoryPathChanged(string? value)
     {
-        settingsService.Settings.RepositoryPath = value;
-        settingsService.Save();
+        _settingsService.Settings.RepositoryPath = value;
+        _settingsService.Save();
     }
-
-    partial void OnHotkeyChanged(KeyGesture? value)
-    {
-        settingsService.Settings.Hotkey = value?.ToString();
-        settingsService.Save();
-
-        HotkeyStatus = Describe(globalHotkeyService.Apply(value));
-    }
-
-    private static string Describe(HotkeyRegistration registration) => registration switch
-    {
-        { IsRegistered: true } => "Hotkey is active.",
-        { ErrorMessage: { } error } => error,
-        _ => "No hotkey set. Click the box above and press a combination.",
-    };
 
     partial void OnPublishNewBranchesToRemoteChanged(bool value)
     {
-        settingsService.Settings.PublishNewBranchesToRemote = value;
-        settingsService.Save();
+        _settingsService.Settings.PublishNewBranchesToRemote = value;
+        _settingsService.Save();
     }
 
     partial void OnGitExecutablePathChanged(string? value)
     {
-        settingsService.Settings.GitExecutablePath = value;
-        settingsService.Save();
+        _settingsService.Settings.GitExecutablePath = value;
+        _settingsService.Save();
 
         _ = CheckGitAvailabilityCommand.ExecuteAsync(null);
     }

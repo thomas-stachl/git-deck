@@ -9,7 +9,10 @@
         <vm:SettingsViewModel />
     </Design.DataContext>
     <StackPanel Spacing="8" Margin="8">
-        <Button Content="Open Run Window" Command="{Binding ToggleRunWindowCommand}" />
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Content="Switch Branches" Command="{Binding OpenBranchPaletteCommand}" />
+            <Button Content="Commit Changes" Command="{Binding OpenCommitPaletteCommand}" />
+        </StackPanel>
 
         <TextBlock Text="Repository Path" FontWeight="Bold" Margin="0,16,0,0" />
         <DockPanel>
@@ -18,19 +21,31 @@
             <TextBox Text="{Binding RepositoryPath}" PlaceholderText="No repository selected" />
         </DockPanel>
 
-        <TextBlock Text="Hotkey" FontWeight="Bold" Margin="0,16,0,0" />
-        <DockPanel>
-            <Button DockPanel.Dock="Right" Content="Clear" Margin="8,0,0,0"
-                    Command="{Binding ClearHotkeyCommand}" />
-            <TextBox Name="HotkeyBox"
-                     Text="{Binding HotkeyDisplay, Mode=OneWay}"
-                     PlaceholderText="Click here and press a combination"
-                     IsReadOnly="True"
-                     KeyDown="OnHotkeyBoxKeyDown" />
-        </DockPanel>
-        <TextBlock Text="{Binding HotkeyStatus}"
-                   Foreground="Gray"
-                   TextWrapping="Wrap" />
+        <TextBlock Text="Hotkeys" FontWeight="Bold" Margin="0,16,0,0" />
+        <StackPanel Spacing="8" DataContext="{Binding BranchHotkey}">
+            <TextBlock Text="{Binding Label}" />
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Clear" Margin="8,0,0,0"
+                        Command="{Binding ClearCommand}" />
+                <TextBox Text="{Binding Display, Mode=OneWay}"
+                         PlaceholderText="Click here and press a combination"
+                         IsReadOnly="True"
+                         KeyDown="OnHotkeyBoxKeyDown" />
+            </DockPanel>
+            <TextBlock Text="{Binding Status}" Foreground="Gray" TextWrapping="Wrap" />
+        </StackPanel>
+        <StackPanel Spacing="8" Margin="0,8,0,0" DataContext="{Binding CommitHotkey}">
+            <TextBlock Text="{Binding Label}" />
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Clear" Margin="8,0,0,0"
+                        Command="{Binding ClearCommand}" />
+                <TextBox Text="{Binding Display, Mode=OneWay}"
+                         PlaceholderText="Click here and press a combination"
+                         IsReadOnly="True"
+                         KeyDown="OnHotkeyBoxKeyDown" />
+            </DockPanel>
+            <TextBlock Text="{Binding Status}" Foreground="Gray" TextWrapping="Wrap" />
+        </StackPanel>
 
         <TextBlock Text="Branches" FontWeight="Bold" Margin="0,16,0,0" />
         <CheckBox IsChecked="{Binding PublishNewBranchesToRemote}"

@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using GitDeck.App.Services;
+using GitDeck.App.ViewModels;
 using GitDeck.App.Views.Settings;
 using GitDeck.Core.Settings;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,9 +43,9 @@ public partial class App : Application
         {
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-            // Register the hotkey before the settings window is built, so its view model starts
+            // Register the hotkeys before the settings window is built, so its view model starts
             // from the real registration state.
-            RegisterGlobalHotkey(_services);
+            RegisterGlobalHotkeys(_services);
 
             _settingsWindow = _services.GetRequiredService<SettingsWindow>();
 
@@ -54,15 +55,24 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
-    private static void RegisterGlobalHotkey(IServiceProvider services)
+    private static void RegisterGlobalHotkeys(IServiceProvider services)
     {
         var hotkeyService = services.GetRequiredService<IGlobalHotkeyService>();
-        var settingsService = services.GetRequiredService<ISettingsService>();
+        var settings = services.GetRequiredService<ISettingsService>().Settings;
 
-        hotkeyService.Pressed += (_, _) => services.GetRequiredService<IRunWindowService>().Toggle();
+        hotkeyService.Pressed += (_, e) => services
+            .GetRequiredService<IRunWindowService>()
+            .Toggle(ToRunMode(e.Action));
 
-        hotkeyService.Apply(Hotkeys.TryParse(settingsService.Settings.Hotkey));
+        hotkeyService.Apply(HotkeyAction.Branches, Hotkeys.TryParse(settings.BranchHotkey));
+        hotkeyService.Apply(HotkeyAction.Commit, Hotkeys.TryParse(settings.CommitHotkey));
     }
+
+    private static RunMode ToRunMode(HotkeyAction action) => action switch
+    {
+        HotkeyAction.Commit => RunMode.Commit,
+        _ => RunMode.Branches,
+    };
 
     private void OnSettingsWindowClosing(object? sender, WindowClosingEventArgs e)
     {

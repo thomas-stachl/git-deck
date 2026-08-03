@@ -59,6 +59,7 @@ sealed class Program
         services.AddSingleton<IFilePickerService, FilePickerService>();
         services.AddSingleton<IGitExecutableService, GitExecutableService>();
         services.AddSingleton<IBranchService, BranchService>();
+        services.AddSingleton<ICommitService, CommitService>();
 
         // The version is what RegisterHotKey's platform annotation asks for; any Windows that can
         // run .NET 10 satisfies it.

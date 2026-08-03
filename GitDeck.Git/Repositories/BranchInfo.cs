@@ -22,16 +22,17 @@ public sealed record BranchInfo(string Name, bool IsRemote, string? RemoteName, 
 /// <param name="Head">
 /// A description of what is checked out: a branch name, or a note about a detached or unborn HEAD.
 /// </param>
-/// <param name="ChangedFileCount">
-/// Files with staged, unstaged or untracked changes, counted the way <c>git status</c> lists them —
-/// an untracked directory counts once rather than per file inside it.
+/// <param name="ChangedFiles">
+/// Files with staged, unstaged or untracked changes, as <c>git status</c> lists them.
 /// </param>
 public sealed record RepositoryOverview(
     bool IsRepository,
     string? WorkingDirectory,
     string? Head,
-    int ChangedFileCount,
+    IReadOnlyList<ChangedFile> ChangedFiles,
     IReadOnlyList<BranchInfo> Branches)
 {
-    public static readonly RepositoryOverview NotARepository = new(false, null, null, 0, []);
+    public static readonly RepositoryOverview NotARepository = new(false, null, null, [], []);
+
+    public int ChangedFileCount => ChangedFiles.Count;
 }

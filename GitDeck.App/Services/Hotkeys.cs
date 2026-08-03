@@ -75,6 +75,14 @@ public static class Hotkeys
     public const string ModifierRequiredMessage =
         "A hotkey needs at least one modifier (Ctrl, Alt, Shift or Win) together with another key.";
 
+    /// <summary>Names an action in messages the user reads.</summary>
+    public static string Describe(HotkeyAction action) => action switch
+    {
+        HotkeyAction.Branches => "switching branches",
+        HotkeyAction.Commit => "committing changes",
+        _ => action.ToString(),
+    };
+
     /// <summary>
     /// Whether a gesture is usable as a global hotkey. A bare key is rejected: registering one
     /// system-wide would take it away from every other application.

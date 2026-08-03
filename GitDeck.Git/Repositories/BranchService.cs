@@ -173,7 +173,7 @@ public sealed class BranchService(IGitExecutableService gitExecutableService) : 
                 true,
                 TrimSeparator(repository.Info.WorkingDirectory),
                 DescribeHead(repository),
-                CountChangedFiles(repository),
+                GetChangedFiles(repository),
                 [.. repository.Branches
                     .Where(branch => !IsRemoteHead(branch))
                     .Select(ToBranchInfo)
@@ -201,15 +201,15 @@ public sealed class BranchService(IGitExecutableService gitExecutableService) : 
             : head.FriendlyName;
     }
 
-    private static int CountChangedFiles(LibGit2SharpRepository repository)
+    private static IReadOnlyList<ChangedFile> GetChangedFiles(LibGit2SharpRepository repository)
     {
         if (repository.Info.IsBare)
         {
-            return 0;
+            return [];
         }
 
         // Kept deliberately cheap: rename detection and walking into untracked directories are the
-        // expensive parts of a status, and neither changes the count the way git reports it.
+        // expensive parts of a status, and neither changes what git itself reports by default.
         var status = repository.RetrieveStatus(new StatusOptions
         {
             IncludeIgnored = false,
@@ -219,8 +219,52 @@ public sealed class BranchService(IGitExecutableService gitExecutableService) : 
             DetectRenamesInWorkDir = false,
         });
 
-        return status.Count(entry =>
-            entry.State != FileStatus.Unaltered && !entry.State.HasFlag(FileStatus.Ignored));
+        return [.. status
+            .Where(entry => entry.State != FileStatus.Unaltered && !entry.State.HasFlag(FileStatus.Ignored))
+            .Select(entry => new ChangedFile(
+                entry.FilePath,
+                ToChangeKind(entry.State),
+                entry.State.HasFlag(FileStatus.NewInWorkdir)))
+            .OrderBy(file => file.Path, StringComparer.OrdinalIgnoreCase)];
+    }
+
+    /// <summary>
+    /// Reduces the status flags to the one that best describes the file. Order matters: a path can
+    /// carry both index and working-tree flags, and the more significant one should win.
+    /// </summary>
+    private static FileChangeKind ToChangeKind(FileStatus state)
+    {
+        if (state.HasFlag(FileStatus.Conflicted))
+        {
+            return FileChangeKind.Conflicted;
+        }
+
+        if (state.HasFlag(FileStatus.NewInWorkdir))
+        {
+            return FileChangeKind.Untracked;
+        }
+
+        if (state.HasFlag(FileStatus.DeletedFromWorkdir) || state.HasFlag(FileStatus.DeletedFromIndex))
+        {
+            return FileChangeKind.Deleted;
+        }
+
+        if (state.HasFlag(FileStatus.RenamedInIndex) || state.HasFlag(FileStatus.RenamedInWorkdir))
+        {
+            return FileChangeKind.Renamed;
+        }
+
+        if (state.HasFlag(FileStatus.NewInIndex))
+        {
+            return FileChangeKind.Added;
+        }
+
+        if (state.HasFlag(FileStatus.TypeChangeInWorkdir) || state.HasFlag(FileStatus.TypeChangeInIndex))
+        {
+            return FileChangeKind.TypeChanged;
+        }
+
+        return FileChangeKind.Modified;
     }
 
     private static string? TrimSeparator(string? path) =>

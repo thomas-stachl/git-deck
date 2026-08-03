@@ -51,56 +51,132 @@
             BorderThickness="1"
             BoxShadow="0 8 32 0 #66000000">
         <StackPanel>
-            <TextBox Name="SearchBox"
-                     Text="{Binding SearchText}"
-                     PlaceholderText="Search or create a branch..."
-                     IsEnabled="{Binding !IsBusy}"
-                     BorderThickness="0"
-                     Background="Transparent"
-                     FontSize="24"
-                     Padding="18,16"
-                     CaretBrush="White"
-                     Foreground="White" />
+            <!-- Branch mode. The IsVisible binding sits on a wrapper so it still resolves against
+                 the shell after the inner panel switches DataContext to the child view model. -->
+            <StackPanel IsVisible="{Binding IsBranchMode}">
+                <StackPanel DataContext="{Binding Branches}">
+                    <TextBox Name="BranchSearchBox"
+                             Text="{Binding SearchText}"
+                             PlaceholderText="Search or create a branch..."
+                             IsEnabled="{Binding !IsBusy}"
+                             BorderThickness="0"
+                             Background="Transparent"
+                             FontSize="24"
+                             Padding="18,16"
+                             CaretBrush="White"
+                             Foreground="White" />
 
-            <Border Height="1"
-                    Margin="12,0"
-                    Background="#22FFFFFF"
-                    IsVisible="{Binding HasSuggestionArea}" />
+                    <Border Height="1"
+                            Margin="12,0"
+                            Background="#22FFFFFF"
+                            IsVisible="{Binding HasSuggestionArea}" />
 
-            <TextBlock Text="{Binding StatusMessage}"
-                       IsVisible="{Binding HasStatusMessage}"
-                       Foreground="#99FFFFFF"
-                       FontSize="13"
-                       TextWrapping="Wrap"
-                       Margin="18,14" />
+                    <TextBlock Text="{Binding StatusMessage}"
+                               IsVisible="{Binding HasStatusMessage}"
+                               Foreground="#99FFFFFF"
+                               FontSize="13"
+                               TextWrapping="Wrap"
+                               Margin="18,14" />
 
-            <ListBox ItemsSource="{Binding Results}"
-                     SelectedIndex="{Binding SelectedIndex}"
-                     IsVisible="{Binding HasResults}"
-                     Focusable="False"
-                     Background="Transparent"
-                     BorderThickness="0"
-                     Margin="8,6">
-                <ListBox.ItemTemplate>
-                    <DataTemplate x:DataType="vm:RunResult">
-                        <Grid ColumnDefinitions="Auto,*">
-                            <TextBlock Grid.Column="0"
-                                       Text="{Binding Icon}"
-                                       FontSize="22"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,14,0" />
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding Title}"
-                                           Foreground="White"
-                                           FontSize="15" />
-                                <TextBlock Text="{Binding Subtitle}"
-                                           Foreground="#99FFFFFF"
-                                           FontSize="12" />
-                            </StackPanel>
-                        </Grid>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
+                    <ListBox ItemsSource="{Binding Results}"
+                             SelectedIndex="{Binding SelectedIndex}"
+                             IsVisible="{Binding HasResults}"
+                             Focusable="False"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             Margin="8,6">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:RunResult">
+                                <Grid ColumnDefinitions="Auto,*">
+                                    <TextBlock Grid.Column="0"
+                                               Text="{Binding Icon}"
+                                               FontSize="22"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,14,0" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Title}"
+                                                   Foreground="White"
+                                                   FontSize="15" />
+                                        <TextBlock Text="{Binding Subtitle}"
+                                                   Foreground="#99FFFFFF"
+                                                   FontSize="12" />
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Commit mode: tick files, then Enter turns the header into the message box. -->
+            <StackPanel IsVisible="{Binding IsCommitMode}">
+                <StackPanel DataContext="{Binding Commit}">
+                    <TextBlock Text="{Binding SelectionSummary}"
+                               IsVisible="{Binding IsFilesPhase}"
+                               Foreground="White"
+                               FontSize="24"
+                               Padding="18,16" />
+
+                    <TextBox Name="CommitMessageBox"
+                             Text="{Binding Message}"
+                             IsVisible="{Binding IsMessagePhase}"
+                             PlaceholderText="Commit message..."
+                             IsEnabled="{Binding !IsBusy}"
+                             BorderThickness="0"
+                             Background="Transparent"
+                             FontSize="24"
+                             Padding="18,16"
+                             CaretBrush="White"
+                             Foreground="White" />
+
+                    <Border Height="1"
+                            Margin="12,0"
+                            Background="#22FFFFFF"
+                            IsVisible="{Binding HasSuggestionArea}" />
+
+                    <TextBlock Text="{Binding StatusMessage}"
+                               IsVisible="{Binding HasStatusMessage}"
+                               Foreground="#99FFFFFF"
+                               FontSize="13"
+                               TextWrapping="Wrap"
+                               Margin="18,12" />
+
+                    <!-- Kept visible while the message is typed, so it stays clear what is going in
+                         and the window does not resize between the two steps. -->
+                    <ListBox Name="CommitFileList"
+                             ItemsSource="{Binding Files}"
+                             SelectedIndex="{Binding SelectedIndex}"
+                             IsVisible="{Binding HasFiles}"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             MaxHeight="320"
+                             Margin="8,4,8,8">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:CommitFileViewModel">
+                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                    <CheckBox Grid.Column="0"
+                                              IsChecked="{Binding IsSelected}"
+                                              MinWidth="0"
+                                              Margin="0,0,8,0"
+                                              VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding Path}"
+                                               Foreground="White"
+                                               FontSize="14"
+                                               TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2"
+                                               Text="{Binding KindLabel}"
+                                               Foreground="#99FFFFFF"
+                                               FontSize="11"
+                                               Margin="10,0,0,0"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </StackPanel>
+            </StackPanel>
 
             <!-- Repository context, so it is clear which repository a switch would affect.
                  Always shown: with no repository configured, this is where the user is told so and

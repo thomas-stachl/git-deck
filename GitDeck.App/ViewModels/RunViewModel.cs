@@ -1,68 +1,57 @@
-using System;
-using System.Collections.ObjectModel;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using GitDeck.App.Design;
 using GitDeck.Core.Settings;
 using GitDeck.Git.Repositories;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace GitDeck.App.ViewModels;
 
-public enum RunResultKind
+/// <summary>
+/// The run window itself: owns the repository read and the footer both modes share, and hands the
+/// mode-specific work to <see cref="Branches"/> or <see cref="Commit"/>.
+/// </summary>
+public partial class RunViewModel : ObservableObject
 {
-    /// <summary>An existing local or remote branch to switch to.</summary>
-    Branch,
-
-    /// <summary>Create a branch named after the entered text and switch to it.</summary>
-    CreateBranch,
-}
-
-public sealed record RunResult(RunResultKind Kind, string Title, string Subtitle, string Icon, string BranchName, BranchInfo? Branch = null);
-
-public partial class RunViewModel(ISettingsService settingsService, IBranchService branchService) : ObservableObject
-{
-    private const int MaxResults = 8;
-
-    // Parameterless constructor required by the Avalonia XAML previewer/designer;
-    // wires up hand-written fakes instead of the real services.
-    public RunViewModel() : this(new DesignSettingsService(), new DesignBranchService())
-    {
-    }
-
     /// <summary>
     /// Longest repository path shown before the front of it is dropped. Sized to the window, which
     /// is fixed at 640px wide.
     /// </summary>
     private const int MaxPathLength = 44;
 
+    private readonly ISettingsService _settingsService;
+    private readonly IBranchService _branchService;
+
     private RepositoryOverview _repository = RepositoryOverview.NotARepository;
     private CancellationTokenSource? _loadCancellation;
 
-    [ObservableProperty]
-    public partial string SearchText { get; set; } = string.Empty;
+    public RunViewModel(ISettingsService settingsService, IBranchService branchService, ICommitService commitService)
+    {
+        _settingsService = settingsService;
+        _branchService = branchService;
+
+        Branches = new BranchPaletteViewModel(settingsService, branchService, LoadRepositoryAsync);
+        Commit = new CommitPaletteViewModel(settingsService, commitService);
+    }
+
+    // Parameterless constructor required by the Avalonia XAML previewer/designer;
+    // wires up hand-written fakes instead of the real services.
+    public RunViewModel() : this(new DesignSettingsService(), new DesignBranchService(), new DesignCommitService())
+    {
+    }
+
+    public BranchPaletteViewModel Branches { get; }
+
+    public CommitPaletteViewModel Commit { get; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SelectedResult))]
-    public partial ObservableCollection<RunResult> Results { get; set; } = [];
+    [NotifyPropertyChangedFor(nameof(IsBranchMode), nameof(IsCommitMode))]
+    public partial RunMode Mode { get; set; } = RunMode.Branches;
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasSuggestionArea))]
-    public partial bool HasResults { get; set; }
+    public bool IsBranchMode => Mode is RunMode.Branches;
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SelectedResult))]
-    public partial int SelectedIndex { get; set; } = -1;
-
-    /// <summary>Hint or error shown in place of the result list.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasStatusMessage), nameof(HasSuggestionArea))]
-    public partial string? StatusMessage { get; set; }
-
-    /// <summary>Set while a branch is being created, so Enter cannot start a second one.</summary>
-    [ObservableProperty]
-    public partial bool IsBusy { get; set; }
+    public bool IsCommitMode => Mode is RunMode.Commit;
 
     /// <summary>The repository path, shortened from the front when it is too long to fit.</summary>
     [ObservableProperty]
@@ -72,31 +61,53 @@ public partial class RunViewModel(ISettingsService settingsService, IBranchServi
     [NotifyPropertyChangedFor(nameof(HasHead))]
     public partial string HeadDisplay { get; set; } = string.Empty;
 
-    /// <summary>Keeps the branch icon from standing alone before the repository has been read.</summary>
-    public bool HasHead => HeadDisplay.Length > 0;
-
     [ObservableProperty]
     public partial string ChangesDisplay { get; set; } = string.Empty;
 
-    public bool HasStatusMessage => StatusMessage is not null;
+    /// <summary>Keeps the branch icon from standing alone before the repository has been read.</summary>
+    public bool HasHead => HeadDisplay.Length > 0;
 
-    /// <summary>Whether anything is shown below the search box, and so whether to draw the divider.</summary>
-    public bool HasSuggestionArea => HasResults || HasStatusMessage;
+    /// <summary>Whether the active mode is mid-operation, which should hold the window open.</summary>
+    public bool IsBusy => Mode switch
+    {
+        RunMode.Branches => Branches.IsBusy,
+        RunMode.Commit => Commit.IsBusy,
+        _ => false,
+    };
 
-    public RunResult? SelectedResult =>
-        SelectedIndex >= 0 && SelectedIndex < Results.Count ? Results[SelectedIndex] : null;
+    /// <summary>
+    /// Switches to a mode and re-reads the repository. Called each time the window is shown so both
+    /// the branch list and the changed files reflect the repository as it is now.
+    /// </summary>
+    public Task OpenAsync(RunMode mode)
+    {
+        Mode = mode;
+        Reset();
+
+        return LoadRepositoryAsync();
+    }
 
     public void Reset()
     {
-        SearchText = string.Empty;
-        StatusMessage = null;
+        Branches.Reset();
+        Commit.Reset();
     }
 
+    /// <summary>Handles Enter for whichever mode is active.</summary>
+    public Task<bool> ExecuteSelectedAsync() => Mode switch
+    {
+        RunMode.Branches => Branches.ExecuteSelectedAsync(),
+        RunMode.Commit => Commit.AdvanceAsync(),
+        _ => Task.FromResult(false),
+    };
+
     /// <summary>
-    /// Re-reads the branches of the configured repository. Called each time the window is shown so
-    /// suggestions reflect branches created, deleted or fetched since the last time.
+    /// Handles Escape. Returns true when the mode consumed it by stepping back, in which case the
+    /// window should stay open.
     /// </summary>
-    public async Task LoadBranchesAsync()
+    public bool GoBack() => Mode is RunMode.Commit && Commit.GoBack();
+
+    private async Task LoadRepositoryAsync()
     {
         var previous = _loadCancellation;
         _loadCancellation = new CancellationTokenSource();
@@ -109,18 +120,22 @@ public partial class RunViewModel(ISettingsService settingsService, IBranchServi
 
         try
         {
-            _repository = await branchService.GetOverviewAsync(settingsService.Settings.RepositoryPath, cancellationToken);
+            _repository = await _branchService.GetOverviewAsync(_settingsService.Settings.RepositoryPath, cancellationToken);
         }
         catch (OperationCanceledException)
         {
             return;
         }
 
-        if (!cancellationToken.IsCancellationRequested)
+        if (cancellationToken.IsCancellationRequested)
         {
-            UpdateRepositoryInfo();
-            UpdateResults(SearchText);
+            return;
         }
+
+        UpdateRepositoryInfo();
+
+        Branches.OnRepositoryLoaded(_repository);
+        Commit.OnRepositoryLoaded(_repository);
     }
 
     /// <summary>
@@ -135,7 +150,7 @@ public partial class RunViewModel(ISettingsService settingsService, IBranchServi
             return;
         }
 
-        var configuredPath = settingsService.Settings.RepositoryPath;
+        var configuredPath = _settingsService.Settings.RepositoryPath;
 
         RepositoryPathDisplay = string.IsNullOrWhiteSpace(configuredPath)
             ? "No repository configured"
@@ -150,8 +165,8 @@ public partial class RunViewModel(ISettingsService settingsService, IBranchServi
         {
             // A bare repository is still a repository, it just has no working tree to name.
             { IsRepository: true, WorkingDirectory: { } directory } => ShortenPath(directory),
-            { IsRepository: true } => ShortenPath(settingsService.Settings.RepositoryPath),
-            _ when string.IsNullOrWhiteSpace(settingsService.Settings.RepositoryPath) => "No repository configured",
+            { IsRepository: true } => ShortenPath(_settingsService.Settings.RepositoryPath),
+            _ when string.IsNullOrWhiteSpace(_settingsService.Settings.RepositoryPath) => "No repository configured",
             _ => "Not a Git repository",
         };
 
@@ -210,262 +225,5 @@ public partial class RunViewModel(ISettingsService settingsService, IBranchServi
         return tail.Length + 2 > MaxPathLength
             ? $"…{separator}{tail[^Math.Min(tail.Length, MaxPathLength - 2)..]}"
             : $"…{separator}{tail}";
-    }
-
-    /// <summary>
-    /// Runs the highlighted suggestion. Returns whether the window should close, which happens only
-    /// when something was actually done — a failure stays open with the reason in
-    /// <see cref="StatusMessage"/>.
-    /// </summary>
-    public async Task<bool> ExecuteSelectedAsync()
-    {
-        if (IsBusy || SelectedResult is not { } result)
-        {
-            return false;
-        }
-
-        return result.Kind switch
-        {
-            RunResultKind.CreateBranch => await CreateBranchAsync(result),
-            RunResultKind.Branch => await SwitchBranchAsync(result),
-            _ => false,
-        };
-    }
-
-    private Task<bool> CreateBranchAsync(RunResult result)
-    {
-        var publish = settingsService.Settings.PublishNewBranchesToRemote;
-
-        var busyMessage = publish
-            ? $"Creating and publishing \"{result.BranchName}\"..."
-            : $"Creating \"{result.BranchName}\"...";
-
-        return RunOperationAsync(busyMessage, "Could not create the branch.", async () =>
-        {
-            var creation = await branchService.CreateBranchAsync(new CreateBranchRequest(
-                settingsService.Settings.RepositoryPath,
-                result.BranchName,
-                publish,
-                settingsService.Settings.GitExecutablePath));
-
-            return (creation.IsCreated, creation.ErrorMessage);
-        });
-    }
-
-    private Task<bool> SwitchBranchAsync(RunResult result)
-    {
-        if (result.Branch is not { } branch)
-        {
-            return Task.FromResult(false);
-        }
-
-        var busyMessage = branch.IsRemote
-            ? $"Checking out \"{branch.ShortName}\" from {branch.RemoteName ?? "the remote"}..."
-            : $"Switching to \"{branch.Name}\"...";
-
-        return RunOperationAsync(busyMessage, "Could not switch branches.", async () =>
-        {
-            var switched = await branchService.SwitchBranchAsync(
-                new SwitchBranchRequest(settingsService.Settings.RepositoryPath, branch));
-
-            return (switched.IsSwitched, switched.ErrorMessage);
-        });
-    }
-
-    /// <summary>
-    /// Shows <paramref name="busyMessage"/> while <paramref name="operation"/> runs, then either
-    /// reports success to the caller or leaves the window open with the reason it fell short.
-    /// </summary>
-    private async Task<bool> RunOperationAsync(
-        string busyMessage,
-        string fallbackErrorMessage,
-        Func<Task<(bool IsDone, string? ErrorMessage)>> operation)
-    {
-        IsBusy = true;
-        StatusMessage = busyMessage;
-        Results = [];
-        HasResults = false;
-        SelectedIndex = -1;
-
-        (bool IsDone, string? ErrorMessage) outcome;
-        try
-        {
-            outcome = await operation();
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-
-        // Partial success — such as a branch created locally but not published — keeps the window
-        // open so the reason is visible.
-        if (outcome is { IsDone: true, ErrorMessage: null })
-        {
-            return true;
-        }
-
-        // Reload first: it rebuilds the results, and would otherwise clear the message below.
-        await LoadBranchesAsync();
-        StatusMessage = outcome.ErrorMessage ?? fallbackErrorMessage;
-        return false;
-    }
-
-    partial void OnSearchTextChanged(string value) => UpdateResults(value);
-
-    private void UpdateResults(string searchText)
-    {
-        if (IsBusy)
-        {
-            return;
-        }
-
-        var query = searchText.Trim();
-
-        if (query.Length == 0)
-        {
-            Results = [];
-            HasResults = false;
-            SelectedIndex = -1;
-            StatusMessage = null;
-            return;
-        }
-
-        var canCreate = CanCreateBranch(query);
-        var limit = canCreate ? MaxResults - 1 : MaxResults;
-
-        var results = _repository.Branches
-            .Select(branch => (Branch: branch, Rank: Rank(branch, query)))
-            .Where(match => match.Rank is not null)
-            .OrderBy(match => match.Rank)
-            .ThenByDescending(match => match.Branch.IsCurrent)
-            .ThenBy(match => match.Branch.IsRemote)
-            .ThenBy(match => match.Branch.Name.Length)
-            .ThenBy(match => match.Branch.Name, StringComparer.OrdinalIgnoreCase)
-            .Take(limit)
-            .Select(match => ToResult(match.Branch))
-            .ToList();
-
-        if (canCreate)
-        {
-            results.Add(CreateBranchResultEntry(query));
-        }
-
-        Results = new ObservableCollection<RunResult>(results);
-        HasResults = Results.Count > 0;
-        SelectedIndex = HasResults ? 0 : -1;
-        StatusMessage = HasResults ? null : NoResultsMessage(query);
-    }
-
-    /// <summary>
-    /// Offer branch creation only when it could actually succeed: a real repository, a name git
-    /// accepts, and no local branch already using it.
-    /// </summary>
-    private bool CanCreateBranch(string query)
-    {
-        if (!_repository.IsRepository || !branchService.IsValidBranchName(query))
-        {
-            return false;
-        }
-
-        return !_repository.Branches.Any(branch =>
-            !branch.IsRemote && branch.Name.Equals(query, StringComparison.Ordinal));
-    }
-
-    private string NoResultsMessage(string query)
-    {
-        if (!_repository.IsRepository)
-        {
-            return "No repository found. Check the repository path in Settings.";
-        }
-
-        return branchService.IsValidBranchName(query)
-            ? $"No branch matches \"{query}\"."
-            : $"\"{query}\" is not a valid branch name.";
-    }
-
-    private RunResult CreateBranchResultEntry(string branchName)
-    {
-        var subtitle = settingsService.Settings.PublishNewBranchesToRemote
-            ? "Create branch · switch to it and publish to the remote"
-            : "Create branch · switch to it";
-
-        return new RunResult(RunResultKind.CreateBranch, branchName, subtitle, "✨", branchName);
-    }
-
-    private static RunResult ToResult(BranchInfo branch)
-    {
-        var subtitle = branch switch
-        {
-            { IsCurrent: true } => "Local branch · already checked out",
-            { IsRemote: true, RemoteName: { } remote } => $"Remote branch · check out locally from {remote}",
-            { IsRemote: true } => "Remote branch · check out locally",
-            _ => "Local branch · switch to it",
-        };
-
-        var icon = branch.IsRemote ? "☁️" : "🌿";
-
-        return new RunResult(RunResultKind.Branch, branch.Name, subtitle, icon, branch.Name, branch);
-    }
-
-    /// <summary>
-    /// Scores how well a branch matches the query; lower is better, <c>null</c> means no match.
-    /// Prefers whole-name matches over the name without its remote prefix, and start-of-name or
-    /// start-of-segment matches over matches buried in the middle.
-    /// </summary>
-    private static int? Rank(BranchInfo branch, string query)
-    {
-        const StringComparison Comparison = StringComparison.OrdinalIgnoreCase;
-
-        var name = branch.Name;
-        var shortName = branch.ShortName;
-
-        if (name.Equals(query, Comparison))
-        {
-            return 0;
-        }
-
-        if (shortName.Equals(query, Comparison))
-        {
-            return 1;
-        }
-
-        if (name.StartsWith(query, Comparison))
-        {
-            return 2;
-        }
-
-        if (shortName.StartsWith(query, Comparison))
-        {
-            return 3;
-        }
-
-        if (SegmentStartsWith(name, query))
-        {
-            return 4;
-        }
-
-        return name.Contains(query, Comparison) ? 5 : null;
-    }
-
-    // Matches "run-window" against "feature/run-window-suggestions".
-    private static bool SegmentStartsWith(string name, string query)
-    {
-        var start = 0;
-
-        while (true)
-        {
-            var separator = name.IndexOf('/', start);
-            if (separator < 0)
-            {
-                return false;
-            }
-
-            start = separator + 1;
-
-            if (name.AsSpan(start).StartsWith(query, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
     }
 }
