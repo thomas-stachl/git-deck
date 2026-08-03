@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using GitDeck.App.Design;
+using GitDeck.App.Services;
 using GitDeck.Core.Settings;
 using GitDeck.Git.Repositories;
 using System;
@@ -26,18 +27,26 @@ public partial class RunViewModel : ObservableObject
     private RepositoryOverview _repository = RepositoryOverview.NotARepository;
     private CancellationTokenSource? _loadCancellation;
 
-    public RunViewModel(ISettingsService settingsService, IBranchService branchService, ICommitService commitService)
+    public RunViewModel(
+        ISettingsService settingsService,
+        IBranchService branchService,
+        ICommitService commitService,
+        ICommitMessageService commitMessageService)
     {
         _settingsService = settingsService;
         _branchService = branchService;
 
         Branches = new BranchPaletteViewModel(settingsService, branchService, LoadRepositoryAsync);
-        Commit = new CommitPaletteViewModel(settingsService, commitService);
+        Commit = new CommitPaletteViewModel(settingsService, commitService, commitMessageService);
     }
 
     // Parameterless constructor required by the Avalonia XAML previewer/designer;
     // wires up hand-written fakes instead of the real services.
-    public RunViewModel() : this(new DesignSettingsService(), new DesignBranchService(), new DesignCommitService())
+    public RunViewModel() : this(
+        new DesignSettingsService(),
+        new DesignBranchService(),
+        new DesignCommitService(),
+        new DesignCommitMessageService())
     {
     }
 

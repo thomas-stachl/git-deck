@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GitDeck.App.Services;
 using GitDeck.Core.Settings;
 using GitDeck.Git.Repositories;
 using System.Collections.Generic;
@@ -25,10 +26,10 @@ public enum CommitPhase
 /// </summary>
 public partial class CommitPaletteViewModel(
     ISettingsService settingsService,
-    ICommitService commitService) : ObservableObject
+    ICommitService commitService,
+    ICommitMessageService commitMessageService) : ObservableObject
 {
     private const string FilesHint = "Space toggles · Ctrl+A toggles all · Enter to write a message";
-    private const string MessageHint = "Enter to commit · Esc to go back to the files";
 
     private RepositoryOverview _repository = RepositoryOverview.NotARepository;
 
@@ -142,11 +143,58 @@ public partial class CommitPaletteViewModel(
             }
 
             Phase = CommitPhase.Message;
-            StatusMessage = MessageHint;
+            StatusMessage = MessageHint();
             return false;
         }
 
         return await CommitAsync();
+    }
+
+    /// <summary>Whether Ctrl+G can generate a message right now.</summary>
+    public bool CanGenerateMessage =>
+        commitMessageService.IsEnabled && !IsBusy && Phase is CommitPhase.Message && SelectedFiles.Count > 0;
+
+    /// <summary>
+    /// Fills the message box from the diff of the ticked files. The result is left editable — it is a
+    /// starting point, not a commit.
+    /// </summary>
+    [RelayCommand]
+    private async Task GenerateMessageAsync()
+    {
+        if (!CanGenerateMessage)
+        {
+            return;
+        }
+
+        if (_repository.WorkingDirectory is not { } workingDirectory)
+        {
+            StatusMessage = "This repository has no working tree to read a diff from.";
+            return;
+        }
+
+        var files = SelectedFiles;
+
+        IsBusy = true;
+        StatusMessage = "Writing a commit message from the diff...";
+
+        GeneratedCommitMessage generated;
+        try
+        {
+            generated = await commitMessageService.GenerateAsync(workingDirectory, files);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
+        if (generated.Message is { } message)
+        {
+            Message = message;
+            StatusMessage = MessageHint();
+            return;
+        }
+
+        StatusMessage = generated.ErrorMessage ?? "Could not generate a message.";
     }
 
     /// <summary>
@@ -244,6 +292,10 @@ public partial class CommitPaletteViewModel(
             ? $"All {Files.Count} files selected"
             : $"{selected} of {Files.Count} files selected";
     }
+
+    private string MessageHint() => commitMessageService.IsEnabled
+        ? "Enter to commit · Ctrl+G to write one from the diff · Esc to go back"
+        : "Enter to commit · Esc to go back to the files";
 
     private string? DescribeState()
     {

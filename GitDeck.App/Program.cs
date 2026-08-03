@@ -5,6 +5,7 @@ using GitDeck.App.Views.Run;
 using GitDeck.App.Views.Settings;
 using GitDeck.Core.Settings;
 using GitDeck.Git;
+using GitDeck.Git.Generation;
 using GitDeck.Git.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using System;
@@ -60,6 +61,20 @@ sealed class Program
         services.AddSingleton<IGitExecutableService, GitExecutableService>();
         services.AddSingleton<IBranchService, BranchService>();
         services.AddSingleton<ICommitService, CommitService>();
+        services.AddSingleton<IDiffService, DiffService>();
+        services.AddSingleton<ICommitMessageGenerator, CommitMessageGenerator>();
+        services.AddSingleton<ICommitMessageService, CommitMessageService>();
+
+        // DPAPI is Windows-only; elsewhere nothing is stored and the API key comes from the
+        // environment instead of being written to disk in the clear.
+        if (OperatingSystem.IsWindows())
+        {
+            services.AddSingleton<ISecretProtector, WindowsSecretProtector>();
+        }
+        else
+        {
+            services.AddSingleton<ISecretProtector, UnsupportedSecretProtector>();
+        }
 
         // The version is what RegisterHotKey's platform annotation asks for; any Windows that can
         // run .NET 10 satisfies it.

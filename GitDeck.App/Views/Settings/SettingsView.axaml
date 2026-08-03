@@ -54,6 +54,44 @@
                    Foreground="Gray"
                    TextWrapping="Wrap" />
 
+        <TextBlock Text="Commit Message Generation" FontWeight="Bold" Margin="0,16,0,0" />
+        <CheckBox IsChecked="{Binding IsAiEnabled}"
+                  Content="Let a model write commit messages (Ctrl+G)" />
+        <TextBlock Text="Generating a message sends the diff of the selected files to the provider below. Off by default."
+                   Foreground="Gray"
+                   TextWrapping="Wrap" />
+
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" IsEnabled="{Binding IsAiEnabled}"
+              Margin="0,4,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Provider" VerticalAlignment="Center" Margin="0,0,8,4" />
+            <ComboBox Grid.Row="0" Grid.Column="1"
+                      ItemsSource="{Binding AiProviders}"
+                      SelectedItem="{Binding AiProvider}"
+                      HorizontalAlignment="Stretch"
+                      Margin="0,0,0,4" />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Model" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding AiModel}" />
+        </Grid>
+
+        <StackPanel Spacing="8" IsVisible="{Binding IsBaseUrlRelevant}" IsEnabled="{Binding IsAiEnabled}">
+            <TextBox Text="{Binding AiBaseUrl}"
+                     PlaceholderText="https://api.openai.com/v1" />
+            <TextBlock Text="Include the version path. Works with OpenAI, Azure OpenAI, OpenRouter, Groq, Mistral, and local Ollama or LM Studio (http://localhost:11434/v1)."
+                       Foreground="Gray"
+                       TextWrapping="Wrap" />
+        </StackPanel>
+
+        <DockPanel IsEnabled="{Binding IsAiEnabled}">
+            <Button DockPanel.Dock="Right" Content="Clear" Margin="8,0,0,0"
+                    Command="{Binding ClearAiApiKeyCommand}" />
+            <TextBox Text="{Binding AiApiKey}"
+                     PlaceholderText="Paste an API key to store it"
+                     PasswordChar="•" />
+        </DockPanel>
+        <TextBlock Text="{Binding AiKeyStatus}"
+                   Foreground="Gray"
+                   TextWrapping="Wrap" />
+
         <TextBlock Text="Git Executable" FontWeight="Bold" Margin="0,16,0,0" />
         <DockPanel>
             <Button DockPanel.Dock="Right" Content="Browse..." Margin="8,0,0,0"

@@ -5,6 +5,8 @@ using GitDeck.App.Design;
 using GitDeck.App.Services;
 using GitDeck.Core.Settings;
 using GitDeck.Git;
+using GitDeck.Git.Generation;
+using System;
 using System.Threading.Tasks;
 
 namespace GitDeck.App.ViewModels;
@@ -15,22 +17,32 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ISettingsService _settingsService;
     private readonly IFilePickerService _filePickerService;
     private readonly IGitExecutableService _gitExecutableService;
+    private readonly ISecretProtector _secretProtector;
 
     public SettingsViewModel(
         IRunWindowService runWindowService,
         ISettingsService settingsService,
         IFilePickerService filePickerService,
         IGitExecutableService gitExecutableService,
-        IGlobalHotkeyService globalHotkeyService)
+        IGlobalHotkeyService globalHotkeyService,
+        ISecretProtector secretProtector)
     {
         _runWindowService = runWindowService;
         _settingsService = settingsService;
         _filePickerService = filePickerService;
         _gitExecutableService = gitExecutableService;
+        _secretProtector = secretProtector;
 
         RepositoryPath = settingsService.Settings.RepositoryPath;
         GitExecutablePath = settingsService.Settings.GitExecutablePath;
         PublishNewBranchesToRemote = settingsService.Settings.PublishNewBranchesToRemote;
+
+        var ai = settingsService.Settings.Ai;
+        IsAiEnabled = ai.IsEnabled;
+        AiProvider = ai.Provider;
+        AiModel = ai.Model;
+        AiBaseUrl = ai.BaseUrl;
+        AiKeyStatus = DescribeKey();
 
         // The hotkeys are registered at startup, so the editors start from what the hotkey service
         // actually holds rather than re-reading the settings.
@@ -45,7 +57,8 @@ public partial class SettingsViewModel : ObservableObject
         new DesignSettingsService(),
         new DesignFilePickerService(),
         new DesignGitExecutableService(),
-        new DesignGlobalHotkeyService())
+        new DesignGlobalHotkeyService(),
+        new UnsupportedSecretProtector())
     {
     }
 
@@ -67,6 +80,34 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string GitStatus { get; set; } = "Checking for Git...";
+
+    [ObservableProperty]
+    public partial bool IsAiEnabled { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsBaseUrlRelevant))]
+    public partial AiProviderKind AiProvider { get; set; }
+
+    [ObservableProperty]
+    public partial string AiModel { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string? AiBaseUrl { get; set; }
+
+    /// <summary>
+    /// Bound to the key box. Never round-trips the stored secret: it starts empty, and typing into it
+    /// replaces the stored key.
+    /// </summary>
+    [ObservableProperty]
+    public partial string AiApiKey { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string AiKeyStatus { get; set; } = string.Empty;
+
+    public AiProviderKind[] AiProviders { get; } = [AiProviderKind.Anthropic, AiProviderKind.OpenAiCompatible];
+
+    /// <summary>Anthropic's endpoint is fixed; only the OpenAI-compatible adapter takes a base URL.</summary>
+    public bool IsBaseUrlRelevant => AiProvider is AiProviderKind.OpenAiCompatible;
 
     [RelayCommand]
     private void OpenBranchPalette()
@@ -150,6 +191,93 @@ public partial class SettingsViewModel : ObservableObject
     {
         _settingsService.Settings.PublishNewBranchesToRemote = value;
         _settingsService.Save();
+    }
+
+    partial void OnIsAiEnabledChanged(bool value)
+    {
+        _settingsService.Settings.Ai.IsEnabled = value;
+        _settingsService.Save();
+    }
+
+    partial void OnAiProviderChanged(AiProviderKind value)
+    {
+        var settings = _settingsService.Settings.Ai;
+        settings.Provider = value;
+
+        // The model names are provider-specific, so carry the switch through to a working default
+        // rather than leaving an Anthropic model pointed at an OpenAI endpoint.
+        if (value is AiProviderKind.Anthropic && !AiModel.StartsWith("claude", StringComparison.OrdinalIgnoreCase))
+        {
+            AiModel = AiGenerationOptions.DefaultAnthropicModel;
+        }
+
+        _settingsService.Save();
+        AiKeyStatus = DescribeKey();
+    }
+
+    partial void OnAiModelChanged(string value)
+    {
+        _settingsService.Settings.Ai.Model = value;
+        _settingsService.Save();
+    }
+
+    partial void OnAiBaseUrlChanged(string? value)
+    {
+        _settingsService.Settings.Ai.BaseUrl = value;
+        _settingsService.Save();
+    }
+
+    partial void OnAiApiKeyChanged(string value)
+    {
+        if (value.Length == 0)
+        {
+            return;
+        }
+
+        if (!_secretProtector.IsSupported)
+        {
+            AiKeyStatus = "This platform has no secret store, so the key cannot be saved. Use an environment variable instead.";
+            return;
+        }
+
+        _settingsService.Settings.Ai.ProtectedApiKey = _secretProtector.Protect(value);
+        _settingsService.Save();
+
+        // Drop the plaintext from the box now that it is stored, so it is not left on screen.
+        AiApiKey = string.Empty;
+        AiKeyStatus = "Key saved, encrypted for this Windows account.";
+    }
+
+    [RelayCommand]
+    private void ClearAiApiKey()
+    {
+        _settingsService.Settings.Ai.ProtectedApiKey = null;
+        _settingsService.Save();
+
+        AiApiKey = string.Empty;
+        AiKeyStatus = DescribeKey();
+    }
+
+    /// <summary>
+    /// Reports where the key would come from without ever showing it — a stored key, the provider's
+    /// environment variable, or nothing.
+    /// </summary>
+    private string DescribeKey()
+    {
+        if (_settingsService.Settings.Ai.ProtectedApiKey is not null)
+        {
+            return "A key is stored, encrypted for this Windows account.";
+        }
+
+        var variable = _settingsService.Settings.Ai.Provider switch
+        {
+            AiProviderKind.Anthropic => "ANTHROPIC_API_KEY",
+            _ => "OPENAI_API_KEY",
+        };
+
+        return Environment.GetEnvironmentVariable(variable) is not null
+            ? $"No key stored. Using {variable} from the environment."
+            : $"No key. Enter one above, or set {variable}.";
     }
 
     partial void OnGitExecutablePathChanged(string? value)

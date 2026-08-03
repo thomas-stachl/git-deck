@@ -17,6 +17,9 @@ public class AppSettings
     /// </summary>
     public string? CommitHotkey { get; set; } = DefaultCommitHotkey;
 
+    /// <summary>Commit message generation. Disabled until the user configures a provider.</summary>
+    public AiSettings Ai { get; set; } = new();
+
     public const string DefaultBranchHotkey = "Ctrl+Alt+G";
 
     public const string DefaultCommitHotkey = "Ctrl+Alt+C";

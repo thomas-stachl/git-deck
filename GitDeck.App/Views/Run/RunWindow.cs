@@ -193,6 +193,14 @@ public partial class RunWindow : Window
                 viewModel.Commit.ToggleAllCommand.Execute(null);
                 e.Handled = true;
                 break;
+
+            // Writing a message from the diff — only offered while the message is being typed.
+            case Key.G when viewModel.Mode is RunMode.Commit
+                            && viewModel.Commit.CanGenerateMessage
+                            && e.KeyModifiers is KeyModifiers.Control:
+                viewModel.Commit.GenerateMessageCommand.Execute(null);
+                e.Handled = true;
+                break;
         }
     }
 
