@@ -3,11 +3,12 @@ namespace GitDeck.Git.Repositories;
 public interface IBranchService
 {
     /// <summary>
-    /// Lists the local and remote branches of the repository at <paramref name="repositoryPath"/>,
-    /// current branch first, then locals, then remotes. Returns
-    /// <see cref="BranchListing.NotARepository"/> when the path is missing or is not a repository.
+    /// Reads the repository at <paramref name="repositoryPath"/>: its local and remote branches
+    /// (current branch first, then locals, then remotes) along with what is checked out and how many
+    /// files have changed. Returns <see cref="RepositoryOverview.NotARepository"/> when the path is
+    /// missing or is not a repository.
     /// </summary>
-    Task<BranchListing> GetBranchesAsync(string? repositoryPath, CancellationToken cancellationToken = default);
+    Task<RepositoryOverview> GetOverviewAsync(string? repositoryPath, CancellationToken cancellationToken = default);
 
     /// <summary>Whether git would accept <paramref name="branchName"/> as a branch name.</summary>
     bool IsValidBranchName(string branchName);

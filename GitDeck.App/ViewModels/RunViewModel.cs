@@ -31,7 +31,13 @@ public partial class RunViewModel(ISettingsService settingsService, IBranchServi
     {
     }
 
-    private BranchListing _listing = BranchListing.NotARepository;
+    /// <summary>
+    /// Longest repository path shown before the front of it is dropped. Sized to the window, which
+    /// is fixed at 640px wide.
+    /// </summary>
+    private const int MaxPathLength = 44;
+
+    private RepositoryOverview _repository = RepositoryOverview.NotARepository;
     private CancellationTokenSource? _loadCancellation;
 
     [ObservableProperty]
@@ -57,6 +63,24 @@ public partial class RunViewModel(ISettingsService settingsService, IBranchServi
     /// <summary>Set while a branch is being created, so Enter cannot start a second one.</summary>
     [ObservableProperty]
     public partial bool IsBusy { get; set; }
+
+    /// <summary>Whether the footer has a repository to describe.</summary>
+    [ObservableProperty]
+    public partial bool HasRepositoryInfo { get; set; }
+
+    /// <summary>The repository path, shortened from the front when it is too long to fit.</summary>
+    [ObservableProperty]
+    public partial string RepositoryPathDisplay { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasHead))]
+    public partial string HeadDisplay { get; set; } = string.Empty;
+
+    /// <summary>Keeps the branch icon from standing alone before the repository has been read.</summary>
+    public bool HasHead => HeadDisplay.Length > 0;
+
+    [ObservableProperty]
+    public partial string ChangesDisplay { get; set; } = string.Empty;
 
     public bool HasStatusMessage => StatusMessage is not null;
 
@@ -85,9 +109,11 @@ public partial class RunViewModel(ISettingsService settingsService, IBranchServi
 
         var cancellationToken = _loadCancellation.Token;
 
+        ShowConfiguredRepository();
+
         try
         {
-            _listing = await branchService.GetBranchesAsync(settingsService.Settings.RepositoryPath, cancellationToken);
+            _repository = await branchService.GetOverviewAsync(settingsService.Settings.RepositoryPath, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -96,8 +122,86 @@ public partial class RunViewModel(ISettingsService settingsService, IBranchServi
 
         if (!cancellationToken.IsCancellationRequested)
         {
+            UpdateRepositoryInfo();
             UpdateResults(SearchText);
         }
+    }
+
+    /// <summary>
+    /// Fills the footer from the configured path before the repository has been read, so the window
+    /// does not change height once the real values arrive. Only the very first load needs this;
+    /// later ones keep showing the previous repository until the new read replaces it.
+    /// </summary>
+    private void ShowConfiguredRepository()
+    {
+        if (_repository.IsRepository)
+        {
+            return;
+        }
+
+        var configuredPath = settingsService.Settings.RepositoryPath;
+
+        HasRepositoryInfo = !string.IsNullOrWhiteSpace(configuredPath);
+        RepositoryPathDisplay = ShortenPath(configuredPath);
+        HeadDisplay = string.Empty;
+        ChangesDisplay = string.Empty;
+    }
+
+    private void UpdateRepositoryInfo()
+    {
+        HasRepositoryInfo = _repository.IsRepository;
+        RepositoryPathDisplay = ShortenPath(_repository.WorkingDirectory);
+        HeadDisplay = _repository.Head ?? string.Empty;
+        ChangesDisplay = _repository.ChangedFileCount switch
+        {
+            0 => "no changes",
+            1 => "1 changed file",
+            var count => $"{count} changed files",
+        };
+    }
+
+    /// <summary>
+    /// Drops whole leading segments from a path that is too long to fit, keeping the end — which is
+    /// the part that identifies the repository.
+    /// </summary>
+    private static string ShortenPath(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return string.Empty;
+        }
+
+        if (path.Length <= MaxPathLength)
+        {
+            return path;
+        }
+
+        var separator = path.Contains('\\') ? '\\' : '/';
+        var segments = path.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+
+        var kept = 0;
+
+        // The leading ellipsis and the separator after it are always part of the budget.
+        var length = 2;
+
+        for (var index = segments.Length - 1; index >= 0; index--)
+        {
+            var candidate = length + segments[index].Length + (kept > 0 ? 1 : 0);
+            if (kept > 0 && candidate > MaxPathLength)
+            {
+                break;
+            }
+
+            length = candidate;
+            kept++;
+        }
+
+        var tail = string.Join(separator, segments[^kept..]);
+
+        // A single segment can still be longer than the budget on its own.
+        return tail.Length + 2 > MaxPathLength
+            ? $"…{separator}{tail[^Math.Min(tail.Length, MaxPathLength - 2)..]}"
+            : $"…{separator}{tail}";
     }
 
     /// <summary>
@@ -221,7 +325,7 @@ public partial class RunViewModel(ISettingsService settingsService, IBranchServi
         var canCreate = CanCreateBranch(query);
         var limit = canCreate ? MaxResults - 1 : MaxResults;
 
-        var results = _listing.Branches
+        var results = _repository.Branches
             .Select(branch => (Branch: branch, Rank: Rank(branch, query)))
             .Where(match => match.Rank is not null)
             .OrderBy(match => match.Rank)
@@ -250,18 +354,18 @@ public partial class RunViewModel(ISettingsService settingsService, IBranchServi
     /// </summary>
     private bool CanCreateBranch(string query)
     {
-        if (!_listing.IsRepository || !branchService.IsValidBranchName(query))
+        if (!_repository.IsRepository || !branchService.IsValidBranchName(query))
         {
             return false;
         }
 
-        return !_listing.Branches.Any(branch =>
+        return !_repository.Branches.Any(branch =>
             !branch.IsRemote && branch.Name.Equals(query, StringComparison.Ordinal));
     }
 
     private string NoResultsMessage(string query)
     {
-        if (!_listing.IsRepository)
+        if (!_repository.IsRepository)
         {
             return "No repository found. Check the repository path in Settings.";
         }

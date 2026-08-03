@@ -87,6 +87,38 @@
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
+
+            <!-- Repository context, so it is clear which repository a switch would affect. -->
+            <Border IsVisible="{Binding HasRepositoryInfo}"
+                    BorderBrush="#22FFFFFF"
+                    BorderThickness="0,1,0,0"
+                    Padding="18,9">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding RepositoryPathDisplay}"
+                               Foreground="#88FFFFFF"
+                               FontSize="12"
+                               TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1"
+                               Text="🌿"
+                               IsVisible="{Binding HasHead}"
+                               FontSize="11"
+                               Margin="16,0,6,0"
+                               VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding HeadDisplay}"
+                               Foreground="#CCFFFFFF"
+                               FontSize="12"
+                               VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="3"
+                               Text="{Binding ChangesDisplay}"
+                               Foreground="#88FFFFFF"
+                               FontSize="12"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
+                </Grid>
+            </Border>
         </StackPanel>
     </Border>
 

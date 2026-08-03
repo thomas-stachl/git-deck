@@ -5,8 +5,8 @@ namespace GitDeck.Git.Repositories;
 
 public sealed class BranchService(IGitExecutableService gitExecutableService) : IBranchService
 {
-    public Task<BranchListing> GetBranchesAsync(string? repositoryPath, CancellationToken cancellationToken = default)
-        => Task.Run(() => GetBranches(repositoryPath), cancellationToken);
+    public Task<RepositoryOverview> GetOverviewAsync(string? repositoryPath, CancellationToken cancellationToken = default)
+        => Task.Run(() => GetOverview(repositoryPath), cancellationToken);
 
     public bool IsValidBranchName(string branchName)
     {
@@ -157,30 +157,74 @@ public sealed class BranchService(IGitExecutableService gitExecutableService) : 
         }
     }
 
-    private static BranchListing GetBranches(string? repositoryPath)
+    private static RepositoryOverview GetOverview(string? repositoryPath)
     {
         var gitDirectory = TryDiscover(repositoryPath);
         if (gitDirectory is null)
         {
-            return BranchListing.NotARepository;
+            return RepositoryOverview.NotARepository;
         }
 
         try
         {
             using var repository = new LibGit2SharpRepository(gitDirectory);
 
-            return new BranchListing(true, [.. repository.Branches
-                .Where(branch => !IsRemoteHead(branch))
-                .Select(ToBranchInfo)
-                .OrderByDescending(branch => branch.IsCurrent)
-                .ThenBy(branch => branch.IsRemote)
-                .ThenBy(branch => branch.Name, StringComparer.OrdinalIgnoreCase)]);
+            return new RepositoryOverview(
+                true,
+                TrimSeparator(repository.Info.WorkingDirectory),
+                DescribeHead(repository),
+                CountChangedFiles(repository),
+                [.. repository.Branches
+                    .Where(branch => !IsRemoteHead(branch))
+                    .Select(ToBranchInfo)
+                    .OrderByDescending(branch => branch.IsCurrent)
+                    .ThenBy(branch => branch.IsRemote)
+                    .ThenBy(branch => branch.Name, StringComparer.OrdinalIgnoreCase)]);
         }
         catch (Exception ex) when (ex is LibGit2SharpException or IOException or UnauthorizedAccessException or ArgumentException)
         {
-            return BranchListing.NotARepository;
+            return RepositoryOverview.NotARepository;
         }
     }
+
+    private static string DescribeHead(LibGit2SharpRepository repository)
+    {
+        var head = repository.Head;
+
+        if (repository.Info.IsHeadUnborn)
+        {
+            return $"{head.FriendlyName} (no commits yet)";
+        }
+
+        return repository.Info.IsHeadDetached
+            ? $"detached at {head.Tip.Sha[..7]}"
+            : head.FriendlyName;
+    }
+
+    private static int CountChangedFiles(LibGit2SharpRepository repository)
+    {
+        if (repository.Info.IsBare)
+        {
+            return 0;
+        }
+
+        // Kept deliberately cheap: rename detection and walking into untracked directories are the
+        // expensive parts of a status, and neither changes the count the way git reports it.
+        var status = repository.RetrieveStatus(new StatusOptions
+        {
+            IncludeIgnored = false,
+            IncludeUntracked = true,
+            RecurseUntrackedDirs = false,
+            DetectRenamesInIndex = false,
+            DetectRenamesInWorkDir = false,
+        });
+
+        return status.Count(entry =>
+            entry.State != FileStatus.Unaltered && !entry.State.HasFlag(FileStatus.Ignored));
+    }
+
+    private static string? TrimSeparator(string? path) =>
+        path?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
     // Accepts a path anywhere inside the working tree, not just its root.
     private static string? TryDiscover(string? repositoryPath)

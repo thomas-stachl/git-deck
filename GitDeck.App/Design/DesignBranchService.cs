@@ -17,8 +17,8 @@ internal sealed class DesignBranchService : IBranchService
         new("origin/feature/settings-di", true, "origin", false),
     ];
 
-    public Task<BranchListing> GetBranchesAsync(string? repositoryPath, CancellationToken cancellationToken = default)
-        => Task.FromResult(new BranchListing(true, Branches));
+    public Task<RepositoryOverview> GetOverviewAsync(string? repositoryPath, CancellationToken cancellationToken = default)
+        => Task.FromResult(new RepositoryOverview(true, @"C:\Repos\GitDeck", "main", 3, Branches));
 
     public bool IsValidBranchName(string branchName) => !string.IsNullOrWhiteSpace(branchName);
 
