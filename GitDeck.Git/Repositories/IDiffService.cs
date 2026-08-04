@@ -7,12 +7,13 @@ namespace GitDeck.Git.Repositories;
 public sealed record DiffRequest(
     string WorkingDirectory,
     IReadOnlyList<ChangedFile> Files,
-    int MaxCharacters,
-    string? GitExecutablePath = null);
+    int MaxCharacters);
 
-public sealed record DiffResult(string Diff, bool IsTruncated)
+public sealed record DiffResult(string Diff, bool IsTruncated, string? ErrorMessage = null)
 {
     public static readonly DiffResult Empty = new(string.Empty, false);
+
+    public static DiffResult Failed(string errorMessage) => new(string.Empty, false, errorMessage);
 
     public bool IsEmpty => Diff.Length == 0;
 }

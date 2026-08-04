@@ -1,9 +1,11 @@
+using Avalonia.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using GitDeck.App.Design;
 using GitDeck.App.Services;
 using GitDeck.Core.Settings;
 using GitDeck.Git.Repositories;
 using System;
+using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -37,7 +39,14 @@ public partial class RunViewModel : ObservableObject
         _branchService = branchService;
 
         Branches = new BranchPaletteViewModel(settingsService, branchService, LoadRepositoryAsync);
-        Commit = new CommitPaletteViewModel(settingsService, commitService, commitMessageService);
+        Commit = new CommitPaletteViewModel(commitService, commitMessageService);
+
+        // IsBusy is computed over the children, so their changes have to be re-announced for any
+        // binding to it to update.
+        Branches.PropertyChanged += OnChildPropertyChanged;
+        Commit.PropertyChanged += OnChildPropertyChanged;
+
+        Branches.IsActive = true;
     }
 
     // Parameterless constructor required by the Avalonia XAML previewer/designer;
@@ -55,12 +64,17 @@ public partial class RunViewModel : ObservableObject
     public CommitPaletteViewModel Commit { get; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsBranchMode), nameof(IsCommitMode))]
+    [NotifyPropertyChangedFor(nameof(ActivePalette))]
     public partial RunMode Mode { get; set; } = RunMode.Branches;
 
-    public bool IsBranchMode => Mode is RunMode.Branches;
+    /// <summary>The palette the current mode shows; everything key-driven goes through it.</summary>
+    public PaletteViewModel ActivePalette => Mode is RunMode.Commit ? Commit : Branches;
 
-    public bool IsCommitMode => Mode is RunMode.Commit;
+    partial void OnModeChanged(RunMode value)
+    {
+        Branches.IsActive = value is RunMode.Branches;
+        Commit.IsActive = value is RunMode.Commit;
+    }
 
     /// <summary>The repository path, shortened from the front when it is too long to fit.</summary>
     [ObservableProperty]
@@ -77,12 +91,7 @@ public partial class RunViewModel : ObservableObject
     public bool HasHead => HeadDisplay.Length > 0;
 
     /// <summary>Whether the active mode is mid-operation, which should hold the window open.</summary>
-    public bool IsBusy => Mode switch
-    {
-        RunMode.Branches => Branches.IsBusy,
-        RunMode.Commit => Commit.IsBusy,
-        _ => false,
-    };
+    public bool IsBusy => ActivePalette.IsBusy;
 
     /// <summary>
     /// Switches to a mode and re-reads the repository. Called each time the window is shown so both
@@ -96,32 +105,42 @@ public partial class RunViewModel : ObservableObject
         return LoadRepositoryAsync();
     }
 
+    /// <summary>Cancels in-flight work in both modes and clears their transient state.</summary>
     public void Reset()
     {
         Branches.Reset();
         Commit.Reset();
     }
 
-    /// <summary>Handles Enter for whichever mode is active.</summary>
-    public Task<bool> ExecuteSelectedAsync() => Mode switch
-    {
-        RunMode.Branches => Branches.ExecuteSelectedAsync(),
-        RunMode.Commit => Commit.AdvanceAsync(),
-        _ => Task.FromResult(false),
-    };
+    /// <summary>Handles Enter. True means the window should close.</summary>
+    public Task<bool> AcceptAsync() => ActivePalette.AcceptAsync();
 
     /// <summary>
     /// Handles Escape. Returns true when the mode consumed it by stepping back, in which case the
     /// window should stay open.
     /// </summary>
-    public bool GoBack() => Mode is RunMode.Commit && Commit.GoBack();
+    public bool TryStepBack() => ActivePalette.TryStepBack();
+
+    /// <summary>Handles Up/Down. True when the active palette moved its selection.</summary>
+    public bool MoveSelection(int offset) => ActivePalette.MoveSelection(offset);
+
+    /// <summary>Hands any other key to the active palette. True means handled.</summary>
+    public bool HandleKey(Key key, KeyModifiers modifiers) => ActivePalette.HandleKey(key, modifiers);
+
+    private void OnChildPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(PaletteViewModel.IsBusy))
+        {
+            OnPropertyChanged(nameof(IsBusy));
+        }
+    }
 
     private async Task LoadRepositoryAsync()
     {
-        var previous = _loadCancellation;
+        // Cancel-and-drop, deliberately without Dispose: a plain source holds no timer or wait
+        // handle, and disposing while the superseded read is still observing the token is a race.
+        _loadCancellation?.Cancel();
         _loadCancellation = new CancellationTokenSource();
-        previous?.Cancel();
-        previous?.Dispose();
 
         var cancellationToken = _loadCancellation.Token;
 
@@ -134,6 +153,17 @@ public partial class RunViewModel : ObservableObject
         catch (OperationCanceledException)
         {
             return;
+        }
+        catch (Exception ex)
+        {
+            // The service maps known failures to results itself; this is the last line of defence,
+            // because callers fire-and-forget this task and a throw would be unhandled.
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            _repository = RepositoryOverview.Failed(ex.Message);
         }
 
         if (cancellationToken.IsCancellationRequested)
@@ -175,6 +205,8 @@ public partial class RunViewModel : ObservableObject
             // A bare repository is still a repository, it just has no working tree to name.
             { IsRepository: true, WorkingDirectory: { } directory } => ShortenPath(directory),
             { IsRepository: true } => ShortenPath(_settingsService.Settings.RepositoryPath),
+            // A permission problem or corrupt index is not the same as "not a repository".
+            { LoadError: not null } => "Could not read the repository",
             _ when string.IsNullOrWhiteSpace(_settingsService.Settings.RepositoryPath) => "No repository configured",
             _ => "Not a Git repository",
         };

@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:GitDeck.App.ViewModels"
+             xmlns:controls="using:GitDeck.App.Controls"
              x:DataType="vm:SettingsViewModel"
              x:Class="GitDeck.App.Views.Settings.SettingsView">
     <Design.DataContext>
@@ -18,34 +19,26 @@
         <DockPanel>
             <Button DockPanel.Dock="Right" Content="Browse..." Margin="8,0,0,0"
                     Command="{Binding BrowseRepositoryPathCommand}" />
-            <TextBox Text="{Binding RepositoryPath}" PlaceholderText="No repository selected" />
+            <TextBox Text="{Binding RepositoryPath, UpdateSourceTrigger=LostFocus}" PlaceholderText="No repository selected" />
         </DockPanel>
 
         <TextBlock Text="Hotkeys" FontWeight="Bold" Margin="0,16,0,0" />
-        <StackPanel Spacing="8" DataContext="{Binding BranchHotkey}">
-            <TextBlock Text="{Binding Label}" />
-            <DockPanel>
-                <Button DockPanel.Dock="Right" Content="Clear" Margin="8,0,0,0"
-                        Command="{Binding ClearCommand}" />
-                <TextBox Text="{Binding Display, Mode=OneWay}"
-                         PlaceholderText="Click here and press a combination"
-                         IsReadOnly="True"
-                         KeyDown="OnHotkeyBoxKeyDown" />
-            </DockPanel>
-            <TextBlock Text="{Binding Status}" Foreground="Gray" TextWrapping="Wrap" />
-        </StackPanel>
-        <StackPanel Spacing="8" Margin="0,8,0,0" DataContext="{Binding CommitHotkey}">
-            <TextBlock Text="{Binding Label}" />
-            <DockPanel>
-                <Button DockPanel.Dock="Right" Content="Clear" Margin="8,0,0,0"
-                        Command="{Binding ClearCommand}" />
-                <TextBox Text="{Binding Display, Mode=OneWay}"
-                         PlaceholderText="Click here and press a combination"
-                         IsReadOnly="True"
-                         KeyDown="OnHotkeyBoxKeyDown" />
-            </DockPanel>
-            <TextBlock Text="{Binding Status}" Foreground="Gray" TextWrapping="Wrap" />
-        </StackPanel>
+        <ItemsControl ItemsSource="{Binding Hotkeys.Editors}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:HotkeyEditorViewModel">
+                    <StackPanel Spacing="8" Margin="0,0,0,8">
+                        <TextBlock Text="{Binding Label}" />
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="Clear" Margin="8,0,0,0"
+                                    Command="{Binding ClearCommand}" />
+                            <controls:HotkeyBox Gesture="{Binding Hotkey}"
+                                                PlaceholderText="Click here and press a combination" />
+                        </DockPanel>
+                        <TextBlock Text="{Binding Status}" Foreground="Gray" TextWrapping="Wrap" />
+                    </StackPanel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
 
         <TextBlock Text="Branches" FontWeight="Bold" Margin="0,16,0,0" />
         <CheckBox IsChecked="{Binding PublishNewBranchesToRemote}"
@@ -54,63 +47,67 @@
                    Foreground="Gray"
                    TextWrapping="Wrap" />
 
-        <TextBlock Text="Commit Message Generation" FontWeight="Bold" Margin="0,16,0,0" />
-        <CheckBox IsChecked="{Binding IsAiEnabled}"
-                  Content="Let a model write commit messages (Ctrl+G)" />
-        <TextBlock Text="Generating a message sends the diff of the selected files to the provider below. Off by default."
-                   Foreground="Gray"
-                   TextWrapping="Wrap" />
-
-        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" IsEnabled="{Binding IsAiEnabled}"
-              Margin="0,4,0,0">
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="Provider" VerticalAlignment="Center" Margin="0,0,8,4" />
-            <ComboBox Grid.Row="0" Grid.Column="1"
-                      ItemsSource="{Binding AiProviders}"
-                      SelectedItem="{Binding AiProvider}"
-                      HorizontalAlignment="Stretch"
-                      Margin="0,0,0,4" />
-            <TextBlock Grid.Row="1" Grid.Column="0" Text="Model" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <TextBox Grid.Row="1" Grid.Column="1"
-                     Text="{Binding AiModel}"
-                     PlaceholderText="Provider default" />
-        </Grid>
-
-        <TextBlock Text="{Binding AiProviderNote}"
-                   Foreground="Gray"
-                   TextWrapping="Wrap" />
-
-        <StackPanel Spacing="8" IsVisible="{Binding IsBaseUrlRelevant}" IsEnabled="{Binding IsAiEnabled}">
-            <TextBox Text="{Binding AiBaseUrl}"
-                     PlaceholderText="https://api.openai.com/v1" />
-            <TextBlock Text="Include the version path. Works with OpenAI, Azure OpenAI, OpenRouter, Groq, Mistral, and local Ollama or LM Studio."
+        <StackPanel Spacing="8" DataContext="{Binding Ai}" x:DataType="vm:AiSettingsViewModel">
+            <TextBlock Text="Commit Message Generation" FontWeight="Bold" Margin="0,16,0,0" />
+            <CheckBox IsChecked="{Binding IsEnabled}"
+                      Content="Let a model write commit messages (Ctrl+G)" />
+            <TextBlock Text="Generating a message sends the diff of the selected files to the provider below. Off by default."
                        Foreground="Gray"
                        TextWrapping="Wrap" />
-        </StackPanel>
 
-        <!-- Claude Code carries its own credentials, so the key row is hidden for it entirely. -->
-        <StackPanel Spacing="8" IsVisible="{Binding IsApiKeyRelevant}" IsEnabled="{Binding IsAiEnabled}">
-            <DockPanel>
-                <Button DockPanel.Dock="Right" Content="Clear" Margin="8,0,0,0"
-                        Command="{Binding ClearAiApiKeyCommand}" />
-                <TextBox Text="{Binding AiApiKey}"
-                         PlaceholderText="Paste an API key to store it"
-                         PasswordChar="•" />
-            </DockPanel>
-            <TextBlock Text="{Binding AiKeyStatus}"
+            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" IsEnabled="{Binding IsEnabled}"
+                  Margin="0,4,0,0">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Provider" VerticalAlignment="Center" Margin="0,0,8,4" />
+                <ComboBox Grid.Row="0" Grid.Column="1"
+                          ItemsSource="{Binding Providers}"
+                          SelectedItem="{Binding Provider}"
+                          HorizontalAlignment="Stretch"
+                          Margin="0,0,0,4" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Model" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <TextBox Grid.Row="1" Grid.Column="1"
+                         Text="{Binding Model, UpdateSourceTrigger=LostFocus}"
+                         PlaceholderText="Provider default" />
+            </Grid>
+
+            <TextBlock Text="{Binding ProviderNote}"
                        Foreground="Gray"
                        TextWrapping="Wrap" />
-        </StackPanel>
 
-        <Button Content="Use local Ollama"
-                Command="{Binding UseOllamaPresetCommand}"
-                IsEnabled="{Binding IsAiEnabled}"
-                HorizontalAlignment="Left" />
+            <StackPanel Spacing="8" IsVisible="{Binding IsBaseUrlRelevant}" IsEnabled="{Binding IsEnabled}">
+                <TextBox Text="{Binding BaseUrl, UpdateSourceTrigger=LostFocus}"
+                         PlaceholderText="https://api.openai.com/v1" />
+                <TextBlock Text="Include the version path. Works with OpenAI, Azure OpenAI, OpenRouter, Groq, Mistral, and local Ollama or LM Studio."
+                           Foreground="Gray"
+                           TextWrapping="Wrap" />
+            </StackPanel>
+
+            <!-- Claude Code carries its own credentials, so the key row is hidden for it entirely. -->
+            <StackPanel Spacing="8" IsVisible="{Binding IsApiKeyRelevant}" IsEnabled="{Binding IsEnabled}">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Content="Clear" Margin="8,0,0,0"
+                            Command="{Binding ClearApiKeyCommand}" />
+                    <Button DockPanel.Dock="Right" Content="Save" Margin="8,0,0,0"
+                            Command="{Binding SaveApiKeyCommand}" />
+                    <TextBox Text="{Binding ApiKey}"
+                             PlaceholderText="Enter an API key to store it"
+                             PasswordChar="•" />
+                </DockPanel>
+                <TextBlock Text="{Binding KeyStatus}"
+                           Foreground="Gray"
+                           TextWrapping="Wrap" />
+            </StackPanel>
+
+            <Button Content="Use local Ollama"
+                    Command="{Binding UseOllamaPresetCommand}"
+                    IsEnabled="{Binding IsEnabled}"
+                    HorizontalAlignment="Left" />
+        </StackPanel>
 
         <TextBlock Text="Git Executable" FontWeight="Bold" Margin="0,16,0,0" />
         <DockPanel>
             <Button DockPanel.Dock="Right" Content="Browse..." Margin="8,0,0,0"
                     Command="{Binding BrowseGitExecutablePathCommand}" />
-            <TextBox Text="{Binding GitExecutablePath}" PlaceholderText="Uses 'git' on PATH" />
+            <TextBox Text="{Binding GitExecutablePath, UpdateSourceTrigger=LostFocus}" PlaceholderText="Uses 'git' on PATH" />
         </DockPanel>
         <DockPanel>
             <Button DockPanel.Dock="Right" Content="Check" Margin="8,0,0,0"

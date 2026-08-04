@@ -17,8 +17,19 @@ public class AppSettings
     /// </summary>
     public string? CommitHotkey { get; set; } = DefaultCommitHotkey;
 
+    private AiSettings _ai = new();
+
     /// <summary>Commit message generation. Disabled until the user configures a provider.</summary>
-    public AiSettings Ai { get; set; } = new();
+    /// <remarks>
+    /// The setter tolerates null because the deserializer is not bound by the nullability
+    /// annotation: a hand-edited <c>"Ai": null</c> in settings.json would otherwise put a null
+    /// behind a non-nullable property and crash every consumer.
+    /// </remarks>
+    public AiSettings Ai
+    {
+        get => _ai;
+        set => _ai = value ?? new AiSettings();
+    }
 
     public const string DefaultBranchHotkey = "Ctrl+Alt+G";
 

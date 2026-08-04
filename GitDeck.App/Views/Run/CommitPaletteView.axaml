@@ -1,0 +1,76 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:GitDeck.App.ViewModels"
+             x:Class="GitDeck.App.Views.Run.CommitPaletteView"
+             x:DataType="vm:CommitPaletteViewModel">
+
+    <StackPanel>
+        <Grid ColumnDefinitions="Auto,*">
+            <Image Grid.Column="0"
+                   Source="/Assets/gitdeck-icon.png"
+                   Width="28"
+                   Height="28"
+                   Margin="18,0,0,0"
+                   VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1"
+                       Classes="palette-summary"
+                       Text="{Binding SelectionSummary}"
+                       IsVisible="{Binding IsFilesPhase}" />
+
+            <!-- Multi-line so a generated subject-plus-body message can be reviewed and edited;
+                 Enter still commits (the window handles it), Shift+Enter breaks a line. -->
+            <TextBox Grid.Column="1"
+                     Name="MessageBox"
+                     Classes="palette-input"
+                     Text="{Binding Message}"
+                     IsVisible="{Binding IsMessagePhase}"
+                     PlaceholderText="Commit message..."
+                     IsEnabled="{Binding !IsBusy}"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"
+                     MaxLines="8" />
+        </Grid>
+
+        <Border Classes="palette-divider"
+                IsVisible="{Binding HasSuggestionArea}" />
+
+        <TextBlock Classes="palette-status"
+                   Text="{Binding StatusMessage}"
+                   IsVisible="{Binding HasStatusMessage}" />
+
+        <!-- Kept visible while the message is typed, so it stays clear what is going in and the
+             window does not resize between the two steps. -->
+        <ListBox Name="FileList"
+                 Classes="palette-list"
+                 ItemsSource="{Binding Files}"
+                 SelectedIndex="{Binding SelectedIndex}"
+                 IsVisible="{Binding HasItems}"
+                 MaxHeight="320"
+                 Margin="8,4,8,8">
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:CommitFileViewModel">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <CheckBox Grid.Column="0"
+                                  IsChecked="{Binding IsSelected}"
+                                  MinWidth="0"
+                                  Margin="0,0,8,0"
+                                  VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding Path}"
+                                   Foreground="{StaticResource PalettePrimaryBrush}"
+                                   FontSize="{StaticResource PaletteBodyFontSize}"
+                                   TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2"
+                                   Text="{Binding KindLabel}"
+                                   Foreground="{StaticResource PaletteSecondaryBrush}"
+                                   FontSize="{StaticResource PaletteSmallCaptionFontSize}"
+                                   Margin="10,0,0,0"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </StackPanel>
+
+</UserControl>

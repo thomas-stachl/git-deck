@@ -10,6 +10,7 @@
                 <ColorPaletteResources x:Key="Dark"  RegionColor="#ff1a1a1a" />
             </FluentTheme.Palettes>
         </FluentTheme>
+        <StyleInclude Source="/Styles/Palette.axaml" />
     </Application.Styles>
 
     <TrayIcon.Icons>

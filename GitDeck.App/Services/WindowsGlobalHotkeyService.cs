@@ -1,11 +1,15 @@
 using Avalonia.Input;
 using Avalonia.Threading;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Threading;
+using System.Threading.Tasks;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.UI.Input.KeyboardAndMouse;
@@ -23,7 +27,8 @@ namespace GitDeck.App.Services;
 /// own and marshals presses back to the UI thread.
 /// </remarks>
 [SupportedOSPlatform("windows6.0.6000")]
-public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposable
+public sealed class WindowsGlobalHotkeyService(ILogger<WindowsGlobalHotkeyService>? logger = null)
+    : IGlobalHotkeyService, IDisposable
 {
     private const uint WmApply = PInvoke.WM_APP + 1;
     private const uint WmStop = PInvoke.WM_APP + 2;
@@ -33,14 +38,19 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
 
     private static readonly TimeSpan ApplyTimeout = TimeSpan.FromSeconds(5);
 
+    private readonly ILogger<WindowsGlobalHotkeyService> _logger = logger ?? NullLogger<WindowsGlobalHotkeyService>.Instance;
     private readonly object _gate = new();
     private readonly ManualResetEventSlim _threadReady = new(false);
     private readonly Dictionary<HotkeyAction, KeyGesture?> _hotkeys = [];
     private readonly Dictionary<HotkeyAction, HotkeyRegistration> _results = [];
 
+    // A queue rather than a single slot: each request completes against its own state, so a
+    // request that timed out and is applied late can no longer be confused with a newer one.
+    // The queue also supplies the cross-thread memory fences a plain field never had.
+    private readonly ConcurrentQueue<ApplyRequest> _pendingRequests = new();
+
     private Thread? _thread;
     private uint _threadId;
-    private ApplyRequest? _pending;
     private bool _isDisposed;
 
     public event EventHandler<HotkeyPressedEventArgs>? Pressed;
@@ -73,6 +83,11 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
 
             var result = ApplyCore(action, hotkey);
             _results[action] = result;
+
+            if (result.ErrorMessage is { } error)
+            {
+                _logger.LogWarning("Hotkey for {Action} was not registered: {Error}", action, error);
+            }
 
             return result;
         }
@@ -157,21 +172,31 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
     {
         EnsureThread();
 
-        _pending = request;
+        _pendingRequests.Enqueue(request);
 
         if (!PInvoke.PostThreadMessage(_threadId, WmApply, default, default))
         {
             return null;
         }
 
-        return request.Completed.Wait(ApplyTimeout) ? request : null;
+        return request.Completed.Task.Wait(ApplyTimeout) ? request : null;
     }
 
     private void EnsureThread()
     {
-        if (_thread is not null)
+        if (_thread is { IsAlive: true })
         {
             return;
+        }
+
+        // A dead loop thread — a failed GetMessage, say — used to be permanent: _thread stayed
+        // non-null, so every later Apply posted into the void and all hotkeys silently died until
+        // restart. Detect it and start a fresh loop instead.
+        if (_thread is not null)
+        {
+            _logger.LogWarning("The hotkey message loop died; starting a new one.");
+            _thread.Join(0);
+            _threadReady.Reset();
         }
 
         _thread = new Thread(RunMessageLoop)
@@ -216,6 +241,12 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
                 }
             }
         }
+        catch (Exception ex)
+        {
+            // EnsureThread starts a replacement on the next Apply; the log is the only witness.
+            _logger.LogError(ex, "The hotkey message loop crashed.");
+            throw;
+        }
         finally
         {
             foreach (var hotkeyId in registeredIds)
@@ -242,33 +273,31 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
 
     private void ApplyPending(List<int> registeredIds)
     {
-        if (_pending is not { } request)
+        // Drain everything queued: with one WmApply posted per request, a message can find the
+        // queue already emptied by its predecessor, which is fine.
+        while (_pendingRequests.TryDequeue(out var request))
         {
-            return;
+            PInvoke.UnregisterHotKey(HWND.Null, request.HotkeyId);
+            registeredIds.Remove(request.HotkeyId);
+
+            if (request.VirtualKey == 0)
+            {
+                // Unregister-only.
+                request.IsRegistered = false;
+                request.Completed.TrySetResult(true);
+                continue;
+            }
+
+            request.IsRegistered = PInvoke.RegisterHotKey(HWND.Null, request.HotkeyId, request.Modifiers, request.VirtualKey);
+            request.Error = request.IsRegistered ? WIN32_ERROR.NO_ERROR : (WIN32_ERROR)Marshal.GetLastPInvokeError();
+
+            if (request.IsRegistered)
+            {
+                registeredIds.Add(request.HotkeyId);
+            }
+
+            request.Completed.TrySetResult(true);
         }
-
-        _pending = null;
-
-        PInvoke.UnregisterHotKey(HWND.Null, request.HotkeyId);
-        registeredIds.Remove(request.HotkeyId);
-
-        if (request.VirtualKey == 0)
-        {
-            // Unregister-only.
-            request.IsRegistered = false;
-            request.Completed.Set();
-            return;
-        }
-
-        request.IsRegistered = PInvoke.RegisterHotKey(HWND.Null, request.HotkeyId, request.Modifiers, request.VirtualKey);
-        request.Error = request.IsRegistered ? WIN32_ERROR.NO_ERROR : (WIN32_ERROR)Marshal.GetLastPInvokeError();
-
-        if (request.IsRegistered)
-        {
-            registeredIds.Add(request.HotkeyId);
-        }
-
-        request.Completed.Set();
     }
 
     // Win32 hotkey ids are per-thread and arbitrary; one per action keeps them independent, and
@@ -370,7 +399,10 @@ public sealed class WindowsGlobalHotkeyService : IGlobalHotkeyService, IDisposab
 
         public uint VirtualKey { get; } = virtualKey;
 
-        public ManualResetEventSlim Completed { get; } = new(false);
+        // A TaskCompletionSource instead of a wait handle: nothing to dispose (the old
+        // ManualResetEventSlim leaked its lazily created kernel handle on every timed wait), and
+        // the asynchronous-continuations flag keeps the loop thread from running a waiter inline.
+        public TaskCompletionSource<bool> Completed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public bool IsRegistered { get; set; }
 

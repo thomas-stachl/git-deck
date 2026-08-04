@@ -15,5 +15,15 @@ public partial class SettingsWindow : Window
         DataContext = viewModel;
 
         InitializeComponent();
+
+        // Probe git on every open — the window is a hidden singleton, so a Loaded handler on the
+        // view would only ever run once, and an async void one at that.
+        Opened += (_, _) =>
+        {
+            if (DataContext is SettingsViewModel settings)
+            {
+                _ = settings.CheckGitAvailabilityCommand.ExecuteAsync(null);
+            }
+        };
     }
 }

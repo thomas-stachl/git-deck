@@ -7,8 +7,7 @@ namespace GitDeck.Git.Repositories;
 public sealed record CreateBranchRequest(
     string? RepositoryPath,
     string BranchName,
-    bool PublishToRemote,
-    string? GitExecutablePath = null);
+    bool PublishToRemote);
 
 /// <param name="IsPublished">
 /// Whether the branch reached the remote. Always <c>false</c> when publishing was not requested.

@@ -1,9 +1,9 @@
-using GitDeck.Git.Generation;
-
 namespace GitDeck.Core.Settings;
 
 public class AiSettings
 {
+    public const int DefaultMaxDiffCharacters = 24_000;
+
     /// <summary>
     /// Off by default. Generating a message sends the diff of the selected files to a third party, so
     /// it stays opt-in rather than something a user discovers after the fact.
@@ -31,5 +31,5 @@ public class AiSettings
     /// </summary>
     public string? ProtectedApiKey { get; set; }
 
-    public int MaxDiffCharacters { get; set; } = AiGenerationOptions.DefaultMaxDiffCharacters;
+    public int MaxDiffCharacters { get; set; } = DefaultMaxDiffCharacters;
 }

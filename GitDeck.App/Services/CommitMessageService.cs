@@ -41,8 +41,13 @@ public class CommitMessageService(
             settings.MaxDiffCharacters);
 
         var diff = await diffService.GetDiffAsync(
-            new DiffRequest(workingDirectory, files, options.MaxDiffCharacters, settingsService.Settings.GitExecutablePath),
+            new DiffRequest(workingDirectory, files, options.MaxDiffCharacters),
             cancellationToken);
+
+        if (diff.ErrorMessage is not null)
+        {
+            return GeneratedCommitMessage.Failed(diff.ErrorMessage);
+        }
 
         if (diff.IsEmpty)
         {
@@ -50,7 +55,7 @@ public class CommitMessageService(
         }
 
         var result = await generator.GenerateAsync(
-            new CommitMessageRequest(options, files, diff.Diff, diff.IsTruncated),
+            new CommitMessageRequest(options, workingDirectory, files, diff.Diff, diff.IsTruncated),
             cancellationToken);
 
         return result.IsGenerated
@@ -71,12 +76,6 @@ public class CommitMessageService(
             return stored;
         }
 
-        var variable = settings.Provider switch
-        {
-            AiProviderKind.Anthropic => "ANTHROPIC_API_KEY",
-            _ => "OPENAI_API_KEY",
-        };
-
-        return Environment.GetEnvironmentVariable(variable);
+        return Environment.GetEnvironmentVariable(AiProviderKinds.ApiKeyEnvironmentVariable(settings.Provider));
     }
 }

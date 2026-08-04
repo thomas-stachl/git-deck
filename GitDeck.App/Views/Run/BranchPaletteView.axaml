@@ -1,0 +1,54 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:GitDeck.App.ViewModels"
+             x:Class="GitDeck.App.Views.Run.BranchPaletteView"
+             x:DataType="vm:BranchPaletteViewModel">
+
+    <StackPanel>
+        <Grid ColumnDefinitions="Auto,*">
+            <Image Grid.Column="0"
+                   Source="/Assets/gitdeck-icon.png"
+                   Width="28"
+                   Height="28"
+                   Margin="18,0,0,0"
+                   VerticalAlignment="Center" />
+            <TextBox Grid.Column="1"
+                     Name="SearchBox"
+                     Classes="palette-input"
+                     Text="{Binding SearchText}"
+                     PlaceholderText="Search or create a branch..."
+                     IsEnabled="{Binding !IsBusy}" />
+        </Grid>
+
+        <Border Classes="palette-divider"
+                IsVisible="{Binding HasSuggestionArea}" />
+
+        <TextBlock Classes="palette-status"
+                   Text="{Binding StatusMessage}"
+                   IsVisible="{Binding HasStatusMessage}" />
+
+        <ListBox Classes="palette-list"
+                 ItemsSource="{Binding Results}"
+                 SelectedIndex="{Binding SelectedIndex}"
+                 IsVisible="{Binding HasItems}"
+                 Focusable="False"
+                 Margin="8,6">
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:RunResult">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding Icon}"
+                                   FontSize="{StaticResource PaletteIconFontSize}"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,14,0" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Classes="palette-title" Text="{Binding Title}" />
+                            <TextBlock Classes="palette-subtitle" Text="{Binding Subtitle}" />
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </StackPanel>
+
+</UserControl>
