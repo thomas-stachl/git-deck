@@ -25,14 +25,22 @@ public sealed record BranchInfo(string Name, bool IsRemote, string? RemoteName, 
 /// <param name="ChangedFiles">
 /// Files with staged, unstaged or untracked changes, as <c>git status</c> lists them.
 /// </param>
+/// <param name="LoadError">
+/// Why the repository could not be read, when the cause is something other than the path not being
+/// a repository — a permission problem or a corrupt index should not be reported as "not a Git
+/// repository".
+/// </param>
 public sealed record RepositoryOverview(
     bool IsRepository,
     string? WorkingDirectory,
     string? Head,
     IReadOnlyList<ChangedFile> ChangedFiles,
-    IReadOnlyList<BranchInfo> Branches)
+    IReadOnlyList<BranchInfo> Branches,
+    string? LoadError = null)
 {
     public static readonly RepositoryOverview NotARepository = new(false, null, null, [], []);
+
+    public static RepositoryOverview Failed(string loadError) => new(false, null, null, [], [], loadError);
 
     public int ChangedFileCount => ChangedFiles.Count;
 }

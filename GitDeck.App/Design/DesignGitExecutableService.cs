@@ -11,9 +11,9 @@ internal sealed class DesignGitExecutableService : IGitExecutableService
         => Task.FromResult(new GitAvailability(true, "git version 2.44.0.windows.1"));
 
     public Task<GitCommandResult> RunAsync(
-        string? gitPath,
         string? workingDirectory,
         IReadOnlyList<string> arguments,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
-        => Task.FromResult(new GitCommandResult(true, string.Empty, string.Empty));
+        => Task.FromResult(new GitCommandResult(true, 0, string.Empty, string.Empty));
 }

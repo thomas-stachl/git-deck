@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -10,7 +11,7 @@ namespace GitDeck.Git.Generation;
 /// Talks to any endpoint exposing OpenAI's <c>/chat/completions</c> shape — OpenAI, Azure OpenAI,
 /// Ollama, LM Studio, OpenRouter, Groq, Mistral. Only the base URL, model and key change.
 /// </summary>
-internal sealed class OpenAiCompatibleCommitMessageClient(HttpClient httpClient)
+internal sealed class OpenAiCompatibleCommitMessageClient(HttpClient httpClient) : ICommitMessageProvider
 {
     private const int MaxTokens = 1024;
 
@@ -25,7 +26,17 @@ internal sealed class OpenAiCompatibleCommitMessageClient(HttpClient httpClient)
             ? AiGenerationOptions.DefaultOpenAiCompatibleBaseUrl
             : request.Options.BaseUrl).TrimEnd('/');
 
-        using var message = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/chat/completions")
+        // The base URL is free-typed in Settings. Without this check a value with no scheme
+        // becomes a relative URI, and SendAsync throws InvalidOperationException — a crash, where
+        // a typo deserves a message.
+        if (!Uri.TryCreate($"{baseUrl}/chat/completions", UriKind.Absolute, out var endpoint)
+            || endpoint.Scheme is not ("http" or "https"))
+        {
+            return CommitMessageResult.Failed(
+                "The base URL must be absolute, such as https://api.openai.com/v1. Check it in Settings.");
+        }
+
+        using var message = new HttpRequestMessage(HttpMethod.Post, endpoint)
         {
             Content = JsonContent.Create(
                 new ChatRequest(
@@ -46,37 +57,38 @@ internal sealed class OpenAiCompatibleCommitMessageClient(HttpClient httpClient)
 
         try
         {
-            using var response = await httpClient.SendAsync(message, cancellationToken);
+            using var response = await httpClient.SendAsync(message, cancellationToken).ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode)
             {
-                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                 return CommitMessageResult.Failed(Describe(response.StatusCode, body));
             }
 
-            var completion = await response.Content.ReadFromJsonAsync<ChatResponse>(JsonOptions, cancellationToken);
-            var text = completion?.Choices?.FirstOrDefault()?.Message?.Content;
+            var completion = await response.Content
+                .ReadFromJsonAsync<ChatResponse>(JsonOptions, cancellationToken).ConfigureAwait(false);
+            var choice = completion?.Choices?.FirstOrDefault();
 
-            return string.IsNullOrWhiteSpace(text)
-                ? CommitMessageResult.Failed("The model returned an empty message.")
-                : new CommitMessageResult(text.Trim(), null);
+            // "length" is a normal success on the wire, but the message is cut off mid-sentence.
+            if (choice?.FinishReason == "length")
+            {
+                return CommitMessageResult.Failed("The model ran out of room before finishing the message.");
+            }
+
+            return CommitMessageResult.FromText(choice?.Message?.Content, "The model returned an empty message.");
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException or NotSupportedException)
         {
             return CommitMessageResult.Failed($"Could not reach the model: {ex.Message}");
         }
-        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            return CommitMessageResult.Failed("The model did not respond in time.");
-        }
     }
 
-    private static string Describe(System.Net.HttpStatusCode statusCode, string body) => statusCode switch
+    private static string Describe(HttpStatusCode statusCode, string body) => statusCode switch
     {
-        System.Net.HttpStatusCode.Unauthorized => "The API key was rejected. Check it in Settings.",
-        System.Net.HttpStatusCode.NotFound =>
+        HttpStatusCode.Unauthorized => "The API key was rejected. Check it in Settings.",
+        HttpStatusCode.NotFound =>
             "The endpoint was not found. Check the base URL — it should include the version path, such as https://api.openai.com/v1.",
-        System.Net.HttpStatusCode.TooManyRequests => "The provider is rate limiting. Try again shortly.",
+        HttpStatusCode.TooManyRequests => "The provider is rate limiting. Try again shortly.",
         _ => $"The provider returned {(int)statusCode}: {FirstLine(body)}",
     };
 
@@ -109,5 +121,6 @@ internal sealed class OpenAiCompatibleCommitMessageClient(HttpClient httpClient)
         [property: JsonPropertyName("choices")] IReadOnlyList<ChatChoice>? Choices);
 
     private sealed record ChatChoice(
-        [property: JsonPropertyName("message")] ChatMessage? Message);
+        [property: JsonPropertyName("message")] ChatMessage? Message,
+        [property: JsonPropertyName("finish_reason")] string? FinishReason);
 }

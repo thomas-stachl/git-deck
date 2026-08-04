@@ -1,12 +1,13 @@
+using Avalonia.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using GitDeck.App.Services;
-using GitDeck.Core.Settings;
 using GitDeck.Git.Repositories;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace GitDeck.App.ViewModels;
@@ -25,9 +26,8 @@ public enum CommitPhase
 /// between those steps, so the whole thing is one hotkey and two keystrokes in the common case.
 /// </summary>
 public partial class CommitPaletteViewModel(
-    ISettingsService settingsService,
     ICommitService commitService,
-    ICommitMessageService commitMessageService) : ObservableObject
+    ICommitMessageService commitMessageService) : PaletteViewModel
 {
     private const string FilesHint = "Space toggles · Ctrl+A toggles all · Enter to write a message";
 
@@ -41,42 +41,28 @@ public partial class CommitPaletteViewModel(
     public partial ObservableCollection<CommitFileViewModel> Files { get; set; } = [];
 
     [ObservableProperty]
-    public partial int SelectedIndex { get; set; } = -1;
-
-    [ObservableProperty]
     public partial string Message { get; set; } = string.Empty;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasStatusMessage), nameof(HasSuggestionArea))]
-    public partial string? StatusMessage { get; set; }
-
-    [ObservableProperty]
-    public partial bool IsBusy { get; set; }
 
     /// <summary>Reads "3 of 7 files selected", and doubles as the keyboard hint line.</summary>
     [ObservableProperty]
     public partial string SelectionSummary { get; set; } = "No changes to commit";
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasSuggestionArea))]
-    public partial bool HasFiles { get; set; }
-
     public bool IsFilesPhase => Phase is CommitPhase.Files;
 
     public bool IsMessagePhase => Phase is CommitPhase.Message;
 
-    public bool HasStatusMessage => StatusMessage is not null;
+    protected override int ItemCount => Files.Count;
 
-    public bool HasSuggestionArea => HasFiles || HasStatusMessage;
+    partial void OnFilesChanged(ObservableCollection<CommitFileViewModel> value) => NotifyItemsChanged();
 
-    public void Reset()
+    public override void Reset()
     {
+        base.Reset();
         Phase = CommitPhase.Files;
         Message = string.Empty;
-        StatusMessage = null;
     }
 
-    public void OnRepositoryLoaded(RepositoryOverview repository)
+    public override void OnRepositoryLoaded(RepositoryOverview repository)
     {
         _repository = repository;
 
@@ -92,15 +78,41 @@ public partial class CommitPaletteViewModel(
             file.PropertyChanged += OnFilePropertyChanged;
         }
 
-        HasFiles = Files.Count > 0;
-        SelectedIndex = HasFiles ? 0 : -1;
+        SelectedIndex = Files.Count > 0 ? 0 : -1;
 
         UpdateSelectionSummary();
         StatusMessage = DescribeState();
     }
 
+    /// <summary>The list is only navigable while files are being ticked; in the message phase the
+    /// arrow keys belong to the text box.</summary>
+    public override bool MoveSelection(int offset) => IsFilesPhase && base.MoveSelection(offset);
+
+    /// <summary>The commit palette's own keys, phase-aware so typing is never intercepted.</summary>
+    public override bool HandleKey(Key key, KeyModifiers modifiers)
+    {
+        switch (key)
+        {
+            // Only while ticking files: in the message box these belong to the text.
+            case Key.Space when IsFilesPhase:
+                ToggleSelected();
+                return true;
+
+            case Key.A when IsFilesPhase && modifiers is KeyModifiers.Control:
+                ToggleAll();
+                return true;
+
+            // Writing a message from the diff — only offered while the message is being typed.
+            case Key.G when modifiers is KeyModifiers.Control && CanGenerateMessage:
+                _ = GenerateMessageAsync();
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
     /// <summary>Ticks or unticks the highlighted file.</summary>
-    [RelayCommand]
     private void ToggleSelected()
     {
         if (SelectedIndex >= 0 && SelectedIndex < Files.Count)
@@ -112,7 +124,6 @@ public partial class CommitPaletteViewModel(
     /// <summary>
     /// Ticks everything, or unticks everything when all are already ticked.
     /// </summary>
-    [RelayCommand]
     private void ToggleAll()
     {
         var select = !Files.All(file => file.IsSelected);
@@ -127,7 +138,7 @@ public partial class CommitPaletteViewModel(
     /// Handles Enter: moves from the file list to the message, then commits. Returns whether the
     /// window should close, which only happens once the commit has actually been made.
     /// </summary>
-    public async Task<bool> AdvanceAsync()
+    public override async Task<bool> AcceptAsync()
     {
         if (IsBusy)
         {
@@ -150,15 +161,31 @@ public partial class CommitPaletteViewModel(
         return await CommitAsync();
     }
 
+    /// <summary>
+    /// Handles Escape: steps back to the file list. Returns false when there is nothing to step back
+    /// from, which tells the window to close instead.
+    /// </summary>
+    public override bool TryStepBack()
+    {
+        if (IsBusy || Phase is not CommitPhase.Message)
+        {
+            return false;
+        }
+
+        Phase = CommitPhase.Files;
+        StatusMessage = DescribeState();
+        return true;
+    }
+
     /// <summary>Whether Ctrl+G can generate a message right now.</summary>
     public bool CanGenerateMessage =>
         commitMessageService.IsEnabled && !IsBusy && Phase is CommitPhase.Message && SelectedFiles.Count > 0;
 
     /// <summary>
     /// Fills the message box from the diff of the ticked files. The result is left editable — it is a
-    /// starting point, not a commit.
+    /// starting point, not a commit. Hand-rolled rather than through RunOperationAsync because
+    /// success writes into the message box instead of closing the window.
     /// </summary>
-    [RelayCommand]
     private async Task GenerateMessageAsync()
     {
         if (!CanGenerateMessage)
@@ -173,96 +200,85 @@ public partial class CommitPaletteViewModel(
         }
 
         var files = SelectedFiles;
+        var token = BeginOperation();
 
         IsBusy = true;
         StatusMessage = "Writing a commit message from the diff...";
 
-        GeneratedCommitMessage generated;
         try
         {
-            generated = await commitMessageService.GenerateAsync(workingDirectory, files);
+            var generated = await commitMessageService.GenerateAsync(workingDirectory, files, token);
+
+            // Escape hid the window mid-generation; the result belongs to a dismissed session.
+            if (token.IsCancellationRequested)
+            {
+                return;
+            }
+
+            if (generated.Message is { } message)
+            {
+                Message = message;
+                StatusMessage = MessageHint();
+            }
+            else
+            {
+                StatusMessage = generated.ErrorMessage ?? "Could not generate a message.";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (!token.IsCancellationRequested)
+            {
+                StatusMessage = $"Could not generate a message. {ex.Message}";
+            }
         }
         finally
         {
             IsBusy = false;
         }
-
-        if (generated.Message is { } message)
-        {
-            Message = message;
-            StatusMessage = MessageHint();
-            return;
-        }
-
-        StatusMessage = generated.ErrorMessage ?? "Could not generate a message.";
     }
 
-    /// <summary>
-    /// Handles Escape: steps back to the file list. Returns false when there is nothing to step back
-    /// from, which tells the window to close instead.
-    /// </summary>
-    public bool GoBack()
-    {
-        if (IsBusy || Phase is not CommitPhase.Message)
-        {
-            return false;
-        }
-
-        Phase = CommitPhase.Files;
-        StatusMessage = DescribeState();
-        return true;
-    }
-
-    private async Task<bool> CommitAsync()
+    private Task<bool> CommitAsync()
     {
         var files = SelectedFiles;
 
         if (files.Count == 0)
         {
             StatusMessage = "Tick at least one file to commit.";
-            return false;
+            return Task.FromResult(false);
         }
 
         if (string.IsNullOrWhiteSpace(Message))
         {
             StatusMessage = "Enter a commit message.";
-            return false;
+            return Task.FromResult(false);
         }
 
         if (_repository.WorkingDirectory is not { } workingDirectory)
         {
             StatusMessage = "This repository has no working tree to commit in.";
-            return false;
+            return Task.FromResult(false);
         }
 
-        IsBusy = true;
-        StatusMessage = files.Count == 1
+        var busyMessage = files.Count == 1
             ? "Committing 1 file..."
             : $"Committing {files.Count} files...";
 
-        CommitResult result;
-        try
+        // No OnOperationFailedAsync reload here, deliberately: a rejected commit — a failing
+        // pre-commit hook, say — leaves the message and ticks worth keeping so the user can adjust
+        // and try again. The commit itself gets no cancellation token either: killing git
+        // mid-commit risks a locked index and half-run hooks, so Escape merely discards the result.
+        return RunOperationAsync(busyMessage, "The commit failed.", async _ =>
         {
-            result = await commitService.CommitAsync(new CommitRequest(
-                workingDirectory,
-                Message,
-                files,
-                settingsService.Settings.GitExecutablePath));
-        }
-        finally
-        {
-            IsBusy = false;
-        }
+            var result = await commitService.CommitAsync(
+                new CommitRequest(workingDirectory, Message, files),
+                CancellationToken.None);
 
-        if (result.IsCommitted)
-        {
-            return true;
-        }
-
-        // Deliberately no reload here: a rejected commit — a failing pre-commit hook, say — leaves
-        // the message and ticks worth keeping so the user can adjust and try again.
-        StatusMessage = result.ErrorMessage ?? "The commit failed.";
-        return false;
+            return (result.IsCommitted, result.ErrorMessage);
+        });
     }
 
     private List<ChangedFile> SelectedFiles =>
@@ -299,6 +315,11 @@ public partial class CommitPaletteViewModel(
 
     private string? DescribeState()
     {
+        if (_repository.LoadError is { } loadError)
+        {
+            return loadError;
+        }
+
         if (!_repository.IsRepository)
         {
             return "No repository found. Check the repository path in Settings.";

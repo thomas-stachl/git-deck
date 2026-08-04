@@ -85,10 +85,7 @@ public partial class RunWindow : Window
         FocusForMode();
     }
 
-    /// <summary>
-    /// Puts focus where the keyboard is expected to act: the text box in branch mode and while a
-    /// message is being typed, the file list while files are being ticked.
-    /// </summary>
+    /// <summary>Hands focus to the active palette view, which knows its own focus rules.</summary>
     private void FocusForMode()
     {
         if (DataContext is not RunViewModel viewModel)
@@ -96,23 +93,13 @@ public partial class RunWindow : Window
             return;
         }
 
-        switch (viewModel.Mode)
+        if (viewModel.Mode is RunMode.Commit)
         {
-            case RunMode.Branches:
-                BranchSearchBox.Focus();
-                BranchSearchBox.SelectAll();
-                break;
-
-            case RunMode.Commit when viewModel.Commit.IsMessagePhase:
-                CommitMessageBox.Focus();
-                CommitMessageBox.SelectAll();
-                break;
-
-            case RunMode.Commit:
-                // Nothing to type into during file selection, but something has to hold focus for
-                // key events to reach the window at all.
-                CommitFileList.Focus();
-                break;
+            CommitView.FocusInput();
+        }
+        else
+        {
+            BranchView.FocusInput();
         }
     }
 
@@ -135,9 +122,9 @@ public partial class RunWindow : Window
         _settingsWindowService?.Show();
     }
 
-    private async Task ExecuteSelectedAsync(RunViewModel viewModel)
+    private async Task AcceptAsync(RunViewModel viewModel)
     {
-        if (await viewModel.ExecuteSelectedAsync())
+        if (await viewModel.AcceptAsync())
         {
             HideAndReset();
             return;
@@ -158,7 +145,7 @@ public partial class RunWindow : Window
         {
             case Key.Escape:
                 // A mode may consume Escape to step back rather than close.
-                if (!viewModel.GoBack())
+                if (!viewModel.TryStepBack())
                 {
                     HideAndReset();
                 }
@@ -170,61 +157,25 @@ public partial class RunWindow : Window
                 e.Handled = true;
                 break;
 
-            case Key.Enter:
-                _ = ExecuteSelectedAsync(viewModel);
+            // Bare Enter only: Shift+Enter falls through to the message box as a line break.
+            case Key.Enter when e.KeyModifiers is KeyModifiers.None:
+                _ = AcceptAsync(viewModel);
                 e.Handled = true;
                 break;
 
             case Key.Down:
-                e.Handled = MoveSelection(viewModel, 1);
+                e.Handled = viewModel.MoveSelection(1);
                 break;
 
             case Key.Up:
-                e.Handled = MoveSelection(viewModel, -1);
+                e.Handled = viewModel.MoveSelection(-1);
                 break;
 
-            // Only while ticking files: in the message box these belong to the text.
-            case Key.Space when IsSelectingFiles(viewModel):
-                viewModel.Commit.ToggleSelectedCommand.Execute(null);
-                e.Handled = true;
-                break;
-
-            case Key.A when IsSelectingFiles(viewModel) && e.KeyModifiers is KeyModifiers.Control:
-                viewModel.Commit.ToggleAllCommand.Execute(null);
-                e.Handled = true;
-                break;
-
-            // Writing a message from the diff — only offered while the message is being typed.
-            case Key.G when viewModel.Mode is RunMode.Commit
-                            && viewModel.Commit.CanGenerateMessage
-                            && e.KeyModifiers is KeyModifiers.Control:
-                viewModel.Commit.GenerateMessageCommand.Execute(null);
-                e.Handled = true;
-                break;
-        }
-    }
-
-    private static bool IsSelectingFiles(RunViewModel viewModel) =>
-        viewModel.Mode is RunMode.Commit && viewModel.Commit.IsFilesPhase;
-
-    private static bool MoveSelection(RunViewModel viewModel, int offset)
-    {
-        switch (viewModel.Mode)
-        {
-            case RunMode.Branches when viewModel.Branches.Results.Count > 0:
-                viewModel.Branches.SelectedIndex =
-                    Wrap(viewModel.Branches.SelectedIndex + offset, viewModel.Branches.Results.Count);
-                return true;
-
-            case RunMode.Commit when viewModel.Commit.IsFilesPhase && viewModel.Commit.Files.Count > 0:
-                viewModel.Commit.SelectedIndex =
-                    Wrap(viewModel.Commit.SelectedIndex + offset, viewModel.Commit.Files.Count);
-                return true;
-
+            // Everything mode-specific (Space, Ctrl+A, Ctrl+G) is the active palette's business;
+            // whatever it leaves unhandled still reaches the focused text box as ordinary typing.
             default:
-                return false;
+                e.Handled = viewModel.HandleKey(e.Key, e.KeyModifiers);
+                break;
         }
     }
-
-    private static int Wrap(int index, int count) => (index % count + count) % count;
 }

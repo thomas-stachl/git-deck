@@ -4,6 +4,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using GitDeck.App.Services;
 using GitDeck.App.ViewModels;
+using GitDeck.App.Views.Run;
 using GitDeck.App.Views.Settings;
 using GitDeck.Core.Settings;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,6 +16,7 @@ public partial class App : Application
 {
     private readonly IServiceProvider? _services;
     private SettingsWindow? _settingsWindow;
+    private RunWindow? _runWindow;
     private bool _isExitRequested;
 
     // Parameterless constructor required by the Avalonia XAML previewer/designer.
@@ -30,11 +32,6 @@ public partial class App : Application
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
-
-        if (_services is not null)
-        {
-            DataTemplates.Add(_services.GetRequiredService<ViewLocator>());
-        }
     }
 
     public override void OnFrameworkInitializationCompleted()
@@ -48,21 +45,33 @@ public partial class App : Application
             RegisterGlobalHotkeys(_services);
 
             _settingsWindow = _services.GetRequiredService<SettingsWindow>();
-
             _settingsWindow.Closing += OnSettingsWindowClosing;
+
+            // Both windows are singletons that are shown and hidden, never recreated, so closing
+            // one for real (Alt+F4 reaches the run window despite its lack of decorations) would
+            // leave the next Show() throwing on a closed window.
+            _runWindow = _services.GetRequiredService<RunWindow>();
+            _runWindow.Closing += OnRunWindowClosing;
         }
 
         base.OnFrameworkInitializationCompleted();
     }
 
-    private static void RegisterGlobalHotkeys(IServiceProvider services)
+    private void RegisterGlobalHotkeys(IServiceProvider services)
     {
         var hotkeyService = services.GetRequiredService<IGlobalHotkeyService>();
         var settings = services.GetRequiredService<ISettingsService>().Settings;
 
-        hotkeyService.Pressed += (_, e) => services
-            .GetRequiredService<IRunWindowService>()
-            .Toggle(ToRunMode(e.Action));
+        hotkeyService.Pressed += (_, e) =>
+        {
+            // A press can already be queued on the dispatcher while the tray exit tears windows down.
+            if (_isExitRequested)
+            {
+                return;
+            }
+
+            services.GetRequiredService<IRunWindowService>().Toggle(ToRunMode(e.Action));
+        };
 
         hotkeyService.Apply(HotkeyAction.Branches, Hotkeys.TryParse(settings.BranchHotkey));
         hotkeyService.Apply(HotkeyAction.Commit, Hotkeys.TryParse(settings.CommitHotkey));
@@ -86,6 +95,17 @@ public partial class App : Application
         _settingsWindow?.Hide();
     }
 
+    private void OnRunWindowClosing(object? sender, WindowClosingEventArgs e)
+    {
+        if (_isExitRequested)
+        {
+            return;
+        }
+
+        e.Cancel = true;
+        _runWindow?.HideAndReset();
+    }
+
     private void OnTrayShowClicked(object? sender, EventArgs e)
     {
         _services?.GetRequiredService<ISettingsWindowService>().Show();
@@ -95,6 +115,7 @@ public partial class App : Application
     {
         _isExitRequested = true;
 
+        _runWindow?.Close();
         _settingsWindow?.Close();
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)

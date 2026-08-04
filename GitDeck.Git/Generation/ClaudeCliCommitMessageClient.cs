@@ -8,7 +8,7 @@ namespace GitDeck.Git.Generation;
 /// Unlike the other adapters this drives a CLI, whose flags are not an API contract the way
 /// <c>POST /v1/messages</c> is. That is the trade for zero setup.
 /// </remarks>
-internal sealed class ClaudeCliCommitMessageClient(IProcessRunner processRunner)
+internal sealed class ClaudeCliCommitMessageClient(IProcessRunner processRunner) : ICommitMessageProvider
 {
     /// <summary>
     /// Claude Code is a coding agent, and left to itself it will go read files and run git rather than
@@ -16,8 +16,6 @@ internal sealed class ClaudeCliCommitMessageClient(IProcessRunner processRunner)
     /// </summary>
     private static readonly string[] DisallowedTools =
         ["Bash", "Read", "Edit", "Write", "Glob", "Grep", "WebFetch", "WebSearch", "Task", "TodoWrite"];
-
-    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(120);
 
     public async Task<CommitMessageResult> GenerateAsync(CommitMessageRequest request, CancellationToken cancellationToken)
     {
@@ -42,34 +40,23 @@ internal sealed class ClaudeCliCommitMessageClient(IProcessRunner processRunner)
             arguments.Add(request.Options.Model);
         }
 
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(Timeout);
-
-        ProcessResult result;
-        try
-        {
-            result = await processRunner.RunAsync(
-                executable,
-                workingDirectory: null,
-                arguments,
-                CommitMessagePrompt.BuildUserMessage(request),
-                environment: null,
-                timeout.Token);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            return CommitMessageResult.Failed("Claude Code did not respond in time.");
-        }
+        // Run in the repository so the CLI picks up that project's CLAUDE.md and settings —
+        // inheriting the app's own working directory made the output depend on how GitDeck was
+        // launched. Cancellation (including the generator's timeout) propagates to the runner,
+        // which kills the process tree.
+        var result = await processRunner.RunAsync(
+            executable,
+            request.WorkingDirectory,
+            arguments,
+            CommitMessagePrompt.BuildUserMessage(request),
+            environment: null,
+            cancellationToken).ConfigureAwait(false);
 
         if (!result.IsSuccess)
         {
             return CommitMessageResult.Failed($"Claude Code failed: {result.FailureMessage}");
         }
 
-        var message = result.StandardOutput.Trim();
-
-        return message.Length == 0
-            ? CommitMessageResult.Failed("Claude Code returned an empty message.")
-            : new CommitMessageResult(message, null);
+        return CommitMessageResult.FromText(result.StandardOutput, "Claude Code returned an empty message.");
     }
 }

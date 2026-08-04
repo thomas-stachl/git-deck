@@ -8,8 +8,7 @@ namespace GitDeck.Git.Repositories;
 public sealed record CommitRequest(
     string WorkingDirectory,
     string Message,
-    IReadOnlyList<ChangedFile> Files,
-    string? GitExecutablePath = null);
+    IReadOnlyList<ChangedFile> Files);
 
 public sealed record CommitResult(bool IsCommitted, string? ErrorMessage)
 {

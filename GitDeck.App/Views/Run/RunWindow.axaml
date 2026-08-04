@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:GitDeck.App.ViewModels"
+        xmlns:run="using:GitDeck.App.Views.Run"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="76"
@@ -17,225 +18,52 @@
         TransparencyLevelHint="AcrylicBlur, Blur, Transparent"
         Background="Transparent">
 
-    <Window.Styles>
-        <!-- The search/message boxes sit next to the brand icon in a shared row; Fluent's TextBox
-             template swaps PART_BorderElement's border/background to an accent-colored ring on
-             focus, which rings just the field and leaves the icon looking detached. The window
-             itself is the whole focused surface here, so the focused state is flattened back to
-             matching the unfocused one. -->
-        <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-        </Style>
-
-        <Style Selector="ListBoxItem">
-            <Setter Property="Padding" Value="10,8" />
-            <Setter Property="CornerRadius" Value="6" />
-            <Setter Property="Margin" Value="0,1" />
-        </Style>
-        <Style Selector="ListBoxItem:selected">
-            <Setter Property="Background" Value="#33FFFFFF" />
-        </Style>
-        <Style Selector="ListBoxItem:pointerover">
-            <Setter Property="Background" Value="#22FFFFFF" />
-        </Style>
-
-        <!-- Fluent's Button paints its background on the inner presenter, so the footer button has
-             to be flattened there rather than on the Button itself. -->
-        <Style Selector="Button.footer /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="CornerRadius" Value="5" />
-        </Style>
-        <Style Selector="Button.footer:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="#22FFFFFF" />
-        </Style>
-        <Style Selector="Button.footer:pressed /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="#33FFFFFF" />
-        </Style>
-    </Window.Styles>
-
-    <Border Background="#F21F1F23"
+    <Border Background="{StaticResource PaletteSurfaceBrush}"
             CornerRadius="10"
-            BorderBrush="#33FFFFFF"
+            BorderBrush="{StaticResource PaletteOutlineBrush}"
             BorderThickness="1"
             BoxShadow="0 8 32 0 #66000000">
         <StackPanel>
-            <!-- Branch mode. The IsVisible binding sits on a wrapper so it still resolves against
-                 the shell after the inner panel switches DataContext to the child view model. -->
-            <StackPanel IsVisible="{Binding IsBranchMode}">
-                <StackPanel DataContext="{Binding Branches}">
-                    <Grid ColumnDefinitions="Auto,*">
-                        <Image Grid.Column="0"
-                               Source="/Assets/gitdeck-icon.png"
-                               Width="28"
-                               Height="28"
-                               Margin="18,0,0,0"
-                               VerticalAlignment="Center" />
-                        <TextBox Grid.Column="1"
-                                 Name="BranchSearchBox"
-                                 Text="{Binding SearchText}"
-                                 PlaceholderText="Search or create a branch..."
-                                 IsEnabled="{Binding !IsBusy}"
-                                 BorderThickness="0"
-                                 Background="Transparent"
-                                 FontSize="24"
-                                 Padding="14,16,18,16"
-                                 CaretBrush="White"
-                                 Foreground="White" />
-                    </Grid>
+            <!-- Both palettes stay instantiated and are switched by IsActive, so toggling modes by
+                 hotkey never rebuilds a visual tree. -->
+            <run:BranchPaletteView x:Name="BranchView"
+                                   DataContext="{Binding Branches}"
+                                   x:DataType="vm:BranchPaletteViewModel"
+                                   IsVisible="{Binding IsActive}" />
 
-                    <Border Height="1"
-                            Margin="12,0"
-                            Background="#22FFFFFF"
-                            IsVisible="{Binding HasSuggestionArea}" />
-
-                    <TextBlock Text="{Binding StatusMessage}"
-                               IsVisible="{Binding HasStatusMessage}"
-                               Foreground="#99FFFFFF"
-                               FontSize="13"
-                               TextWrapping="Wrap"
-                               Margin="18,14" />
-
-                    <ListBox ItemsSource="{Binding Results}"
-                             SelectedIndex="{Binding SelectedIndex}"
-                             IsVisible="{Binding HasResults}"
-                             Focusable="False"
-                             Background="Transparent"
-                             BorderThickness="0"
-                             Margin="8,6">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate x:DataType="vm:RunResult">
-                                <Grid ColumnDefinitions="Auto,*">
-                                    <TextBlock Grid.Column="0"
-                                               Text="{Binding Icon}"
-                                               FontSize="22"
-                                               VerticalAlignment="Center"
-                                               Margin="0,0,14,0" />
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding Title}"
-                                                   Foreground="White"
-                                                   FontSize="15" />
-                                        <TextBlock Text="{Binding Subtitle}"
-                                                   Foreground="#99FFFFFF"
-                                                   FontSize="12" />
-                                    </StackPanel>
-                                </Grid>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-                </StackPanel>
-            </StackPanel>
-
-            <!-- Commit mode: tick files, then Enter turns the header into the message box. -->
-            <StackPanel IsVisible="{Binding IsCommitMode}">
-                <StackPanel DataContext="{Binding Commit}">
-                    <Grid ColumnDefinitions="Auto,*">
-                        <Image Grid.Column="0"
-                               Source="/Assets/gitdeck-icon.png"
-                               Width="28"
-                               Height="28"
-                               Margin="18,0,0,0"
-                               VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="1"
-                                   Text="{Binding SelectionSummary}"
-                                   IsVisible="{Binding IsFilesPhase}"
-                                   Foreground="White"
-                                   FontSize="24"
-                                   Padding="14,16,18,16" />
-
-                        <TextBox Grid.Column="1"
-                                 Name="CommitMessageBox"
-                                 Text="{Binding Message}"
-                                 IsVisible="{Binding IsMessagePhase}"
-                                 PlaceholderText="Commit message..."
-                                 IsEnabled="{Binding !IsBusy}"
-                                 BorderThickness="0"
-                                 Background="Transparent"
-                                 FontSize="24"
-                                 Padding="14,16,18,16"
-                                 CaretBrush="White"
-                                 Foreground="White" />
-                    </Grid>
-
-                    <Border Height="1"
-                            Margin="12,0"
-                            Background="#22FFFFFF"
-                            IsVisible="{Binding HasSuggestionArea}" />
-
-                    <TextBlock Text="{Binding StatusMessage}"
-                               IsVisible="{Binding HasStatusMessage}"
-                               Foreground="#99FFFFFF"
-                               FontSize="13"
-                               TextWrapping="Wrap"
-                               Margin="18,12" />
-
-                    <!-- Kept visible while the message is typed, so it stays clear what is going in
-                         and the window does not resize between the two steps. -->
-                    <ListBox Name="CommitFileList"
-                             ItemsSource="{Binding Files}"
-                             SelectedIndex="{Binding SelectedIndex}"
-                             IsVisible="{Binding HasFiles}"
-                             Background="Transparent"
-                             BorderThickness="0"
-                             MaxHeight="320"
-                             Margin="8,4,8,8">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate x:DataType="vm:CommitFileViewModel">
-                                <Grid ColumnDefinitions="Auto,*,Auto">
-                                    <CheckBox Grid.Column="0"
-                                              IsChecked="{Binding IsSelected}"
-                                              MinWidth="0"
-                                              Margin="0,0,8,0"
-                                              VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding Path}"
-                                               Foreground="White"
-                                               FontSize="14"
-                                               TextTrimming="CharacterEllipsis"
-                                               VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="2"
-                                               Text="{Binding KindLabel}"
-                                               Foreground="#99FFFFFF"
-                                               FontSize="11"
-                                               Margin="10,0,0,0"
-                                               VerticalAlignment="Center" />
-                                </Grid>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-                </StackPanel>
-            </StackPanel>
+            <run:CommitPaletteView x:Name="CommitView"
+                                   DataContext="{Binding Commit}"
+                                   x:DataType="vm:CommitPaletteViewModel"
+                                   IsVisible="{Binding IsActive}" />
 
             <!-- Repository context, so it is clear which repository a switch would affect.
                  Always shown: with no repository configured, this is where the user is told so and
                  how to fix it. -->
-            <Border BorderBrush="#22FFFFFF"
+            <Border BorderBrush="{StaticResource PaletteDividerBrush}"
                     BorderThickness="0,1,0,0"
                     Padding="18,6,10,6">
                 <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Column="0"
                                Text="{Binding RepositoryPathDisplay}"
-                               Foreground="#88FFFFFF"
-                               FontSize="12"
+                               Foreground="{StaticResource PaletteFooterBrush}"
+                               FontSize="{StaticResource PaletteCaptionFontSize}"
                                TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center" />
                     <TextBlock Grid.Column="1"
                                Text="🌿"
                                IsVisible="{Binding HasHead}"
-                               FontSize="11"
+                               FontSize="{StaticResource PaletteSmallCaptionFontSize}"
                                Margin="16,0,6,0"
                                VerticalAlignment="Center" />
                     <TextBlock Grid.Column="2"
                                Text="{Binding HeadDisplay}"
-                               Foreground="#CCFFFFFF"
-                               FontSize="12"
+                               Foreground="{StaticResource PaletteFooterValueBrush}"
+                               FontSize="{StaticResource PaletteCaptionFontSize}"
                                VerticalAlignment="Center" />
                     <TextBlock Grid.Column="3"
                                Text="{Binding ChangesDisplay}"
-                               Foreground="#88FFFFFF"
-                               FontSize="12"
+                               Foreground="{StaticResource PaletteFooterBrush}"
+                               FontSize="{StaticResource PaletteCaptionFontSize}"
                                Margin="12,0,0,0"
                                VerticalAlignment="Center" />
                     <Button Grid.Column="4"
@@ -243,8 +71,8 @@
                             Content="⚙"
                             Click="OnSettingsClick"
                             ToolTip.Tip="Open GitDeck settings"
-                            Foreground="#99FFFFFF"
-                            FontSize="14"
+                            Foreground="{StaticResource PaletteSecondaryBrush}"
+                            FontSize="{StaticResource PaletteBodyFontSize}"
                             Padding="7,1"
                             Margin="10,0,0,0"
                             Cursor="Hand"

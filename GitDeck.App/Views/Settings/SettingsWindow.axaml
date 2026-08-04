@@ -1,15 +1,19 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:GitDeck.App.ViewModels"
+        xmlns:settings="using:GitDeck.App.Views.Settings"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="300"
         x:Class="GitDeck.App.Views.Settings.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
         Width="800" Height="500"
+        MinWidth="560" MinHeight="400"
         Icon="/Assets/gitdeck-icon.ico"
-        Title="GitDeck.App">
+        Title="GitDeck Settings">
 
-    <ContentControl Content="{Binding .}" />
+    <ScrollViewer>
+        <settings:SettingsView />
+    </ScrollViewer>
 
 </Window>

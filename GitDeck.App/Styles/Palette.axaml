@@ -1,0 +1,110 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- The run palette's look, named once. The palette is a dark acrylic overlay by design (it is
+         not themed light/dark), so these are plain resources rather than theme dictionaries. Every
+         style below is scoped by class so including this application-wide cannot restyle anything
+         outside the palette. -->
+    <Styles.Resources>
+        <SolidColorBrush x:Key="PaletteSurfaceBrush" Color="#F21F1F23" />
+        <SolidColorBrush x:Key="PaletteOutlineBrush" Color="#33FFFFFF" />
+        <SolidColorBrush x:Key="PaletteDividerBrush" Color="#22FFFFFF" />
+        <SolidColorBrush x:Key="PaletteSelectionBrush" Color="#33FFFFFF" />
+        <SolidColorBrush x:Key="PaletteHoverBrush" Color="#22FFFFFF" />
+        <SolidColorBrush x:Key="PalettePrimaryBrush" Color="White" />
+        <SolidColorBrush x:Key="PaletteSecondaryBrush" Color="#99FFFFFF" />
+        <SolidColorBrush x:Key="PaletteFooterBrush" Color="#88FFFFFF" />
+        <SolidColorBrush x:Key="PaletteFooterValueBrush" Color="#CCFFFFFF" />
+
+        <x:Double x:Key="PaletteInputFontSize">24</x:Double>
+        <x:Double x:Key="PaletteIconFontSize">22</x:Double>
+        <x:Double x:Key="PaletteTitleFontSize">15</x:Double>
+        <x:Double x:Key="PaletteBodyFontSize">14</x:Double>
+        <x:Double x:Key="PaletteStatusFontSize">13</x:Double>
+        <x:Double x:Key="PaletteCaptionFontSize">12</x:Double>
+        <x:Double x:Key="PaletteSmallCaptionFontSize">11</x:Double>
+    </Styles.Resources>
+
+    <!-- The large borderless text box next to the brand icon. -->
+    <Style Selector="TextBox.palette-input">
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="FontSize" Value="{StaticResource PaletteInputFontSize}" />
+        <Setter Property="Padding" Value="14,16,18,16" />
+        <Setter Property="CaretBrush" Value="White" />
+        <Setter Property="Foreground" Value="{StaticResource PalettePrimaryBrush}" />
+    </Style>
+
+    <!-- The search/message boxes sit next to the brand icon in a shared row; Fluent's TextBox
+         template swaps PART_BorderElement's border/background to an accent-colored ring on
+         focus, which rings just the field and leaves the icon looking detached. The window
+         itself is the whole focused surface here, so the focused state is flattened back to
+         matching the unfocused one. -->
+    <Style Selector="TextBox.palette-input:focus /template/ Border#PART_BorderElement">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
+    <!-- Static text shown in the input row's place (the commit file-selection summary). -->
+    <Style Selector="TextBlock.palette-summary">
+        <Setter Property="FontSize" Value="{StaticResource PaletteInputFontSize}" />
+        <Setter Property="Padding" Value="14,16,18,16" />
+        <Setter Property="Foreground" Value="{StaticResource PalettePrimaryBrush}" />
+    </Style>
+
+    <Style Selector="Border.palette-divider">
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Margin" Value="12,0" />
+        <Setter Property="Background" Value="{StaticResource PaletteDividerBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.palette-status">
+        <Setter Property="Foreground" Value="{StaticResource PaletteSecondaryBrush}" />
+        <Setter Property="FontSize" Value="{StaticResource PaletteStatusFontSize}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Margin" Value="18,12" />
+    </Style>
+
+    <Style Selector="ListBox.palette-list">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
+    <Style Selector="ListBox.palette-list ListBoxItem">
+        <Setter Property="Padding" Value="10,8" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Margin" Value="0,1" />
+    </Style>
+    <Style Selector="ListBox.palette-list ListBoxItem:selected">
+        <Setter Property="Background" Value="{StaticResource PaletteSelectionBrush}" />
+    </Style>
+    <Style Selector="ListBox.palette-list ListBoxItem:pointerover">
+        <Setter Property="Background" Value="{StaticResource PaletteHoverBrush}" />
+    </Style>
+
+    <!-- The two-line row inside the suggestion lists. -->
+    <Style Selector="TextBlock.palette-title">
+        <Setter Property="Foreground" Value="{StaticResource PalettePrimaryBrush}" />
+        <Setter Property="FontSize" Value="{StaticResource PaletteTitleFontSize}" />
+    </Style>
+    <Style Selector="TextBlock.palette-subtitle">
+        <Setter Property="Foreground" Value="{StaticResource PaletteSecondaryBrush}" />
+        <Setter Property="FontSize" Value="{StaticResource PaletteCaptionFontSize}" />
+    </Style>
+
+    <!-- Fluent's Button paints its background on the inner presenter, so the footer button has
+         to be flattened there rather than on the Button itself. -->
+    <Style Selector="Button.footer /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="5" />
+    </Style>
+    <Style Selector="Button.footer:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource PaletteHoverBrush}" />
+    </Style>
+    <Style Selector="Button.footer:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource PaletteSelectionBrush}" />
+    </Style>
+
+</Styles>

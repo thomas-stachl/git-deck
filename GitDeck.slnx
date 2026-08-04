@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="GitDeck.App/GitDeck.App.csproj" />
+  <Project Path="GitDeck.Core/GitDeck.Core.csproj" />
+  <Project Path="GitDeck.Git/GitDeck.Git.csproj" />
+  <Project Path="GitDeck.Ipc/GitDeck.Ipc.csproj" />
+  <Project Path="GitDeck.Tests/GitDeck.Tests.csproj" />
+</Solution>

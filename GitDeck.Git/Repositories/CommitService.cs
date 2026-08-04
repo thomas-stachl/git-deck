@@ -24,7 +24,7 @@ public sealed class CommitService(IGitExecutableService gitExecutableService) : 
 
         if (untracked.Count > 0)
         {
-            var add = await RunAsync(request, ["add", "--", .. untracked], cancellationToken);
+            var add = await RunAsync(request, ["add", "--", .. untracked], cancellationToken).ConfigureAwait(false);
 
             if (!add.IsSuccess)
             {
@@ -36,13 +36,24 @@ public sealed class CommitService(IGitExecutableService gitExecutableService) : 
         var commit = await RunAsync(
             request,
             ["commit", "--only", "--message", request.Message, "--", .. paths],
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
-        return commit.IsSuccess
-            ? new CommitResult(true, null)
-            : CommitResult.Failed(commit.FailureMessage ?? "The commit failed.");
+        if (commit.IsSuccess)
+        {
+            return new CommitResult(true, null);
+        }
+
+        // A rejected commit — a failing pre-commit hook, say — must not leave side effects: the
+        // adds above staged the untracked files, and they would otherwise stay staged. Best
+        // effort, and deliberately not cancellable: it is restoring the user's state.
+        if (untracked.Count > 0)
+        {
+            await RunAsync(request, ["restore", "--staged", "--", .. untracked], CancellationToken.None).ConfigureAwait(false);
+        }
+
+        return CommitResult.Failed(commit.FailureMessage ?? "The commit failed.");
     }
 
     private Task<GitCommandResult> RunAsync(CommitRequest request, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
-        => gitExecutableService.RunAsync(request.GitExecutablePath, request.WorkingDirectory, arguments, cancellationToken);
+        => gitExecutableService.RunAsync(request.WorkingDirectory, arguments, cancellationToken: cancellationToken);
 }

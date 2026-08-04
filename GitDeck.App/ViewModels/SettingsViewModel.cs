@@ -1,53 +1,45 @@
-using Avalonia.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GitDeck.App.Design;
 using GitDeck.App.Services;
 using GitDeck.Core.Settings;
 using GitDeck.Git;
-using GitDeck.Git.Generation;
-using System;
 using System.Threading.Tasks;
 
 namespace GitDeck.App.ViewModels;
 
+/// <summary>
+/// The settings shell: repository and git-executable configuration, plus the AI and hotkey
+/// sections as child view models with their own concerns.
+/// </summary>
 public partial class SettingsViewModel : ObservableObject
 {
     private readonly IRunWindowService _runWindowService;
     private readonly ISettingsService _settingsService;
     private readonly IFilePickerService _filePickerService;
     private readonly IGitExecutableService _gitExecutableService;
-    private readonly ISecretProtector _secretProtector;
+
+    private int _gitProbeVersion;
 
     public SettingsViewModel(
         IRunWindowService runWindowService,
         ISettingsService settingsService,
         IFilePickerService filePickerService,
         IGitExecutableService gitExecutableService,
-        IGlobalHotkeyService globalHotkeyService,
-        ISecretProtector secretProtector)
+        AiSettingsViewModel ai,
+        HotkeySettingsViewModel hotkeys)
     {
         _runWindowService = runWindowService;
         _settingsService = settingsService;
         _filePickerService = filePickerService;
         _gitExecutableService = gitExecutableService;
-        _secretProtector = secretProtector;
+
+        Ai = ai;
+        Hotkeys = hotkeys;
 
         RepositoryPath = settingsService.Settings.RepositoryPath;
         GitExecutablePath = settingsService.Settings.GitExecutablePath;
         PublishNewBranchesToRemote = settingsService.Settings.PublishNewBranchesToRemote;
-
-        var ai = settingsService.Settings.Ai;
-        IsAiEnabled = ai.IsEnabled;
-        AiProvider = ai.Provider;
-        AiModel = ai.Model;
-        AiBaseUrl = ai.BaseUrl;
-        AiKeyStatus = DescribeKey();
-
-        // The hotkeys are registered at startup, so the editors start from what the hotkey service
-        // actually holds rather than re-reading the settings.
-        BranchHotkey = CreateEditor(globalHotkeyService, HotkeyAction.Branches, "Switch branches");
-        CommitHotkey = CreateEditor(globalHotkeyService, HotkeyAction.Commit, "Commit changes");
     }
 
     // Parameterless constructor required by the Avalonia XAML previewer/designer;
@@ -57,17 +49,14 @@ public partial class SettingsViewModel : ObservableObject
         new DesignSettingsService(),
         new DesignFilePickerService(),
         new DesignGitExecutableService(),
-        new DesignGlobalHotkeyService(),
-        new UnsupportedSecretProtector())
+        new AiSettingsViewModel(),
+        new HotkeySettingsViewModel())
     {
     }
 
-    public HotkeyEditorViewModel BranchHotkey { get; }
+    public AiSettingsViewModel Ai { get; }
 
-    public HotkeyEditorViewModel CommitHotkey { get; }
-
-    [ObservableProperty]
-    public partial string Greeting { get; set; } = "Hello from GitDeck.App!";
+    public HotkeySettingsViewModel Hotkeys { get; }
 
     [ObservableProperty]
     public partial string? RepositoryPath { get; set; }
@@ -80,48 +69,6 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string GitStatus { get; set; } = "Checking for Git...";
-
-    [ObservableProperty]
-    public partial bool IsAiEnabled { get; set; }
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsBaseUrlRelevant), nameof(IsApiKeyRelevant), nameof(AiProviderNote))]
-    public partial AiProviderKind AiProvider { get; set; }
-
-    [ObservableProperty]
-    public partial string AiModel { get; set; } = string.Empty;
-
-    [ObservableProperty]
-    public partial string? AiBaseUrl { get; set; }
-
-    /// <summary>
-    /// Bound to the key box. Never round-trips the stored secret: it starts empty, and typing into it
-    /// replaces the stored key.
-    /// </summary>
-    [ObservableProperty]
-    public partial string AiApiKey { get; set; } = string.Empty;
-
-    [ObservableProperty]
-    public partial string AiKeyStatus { get; set; } = string.Empty;
-
-    public AiProviderKind[] AiProviders { get; } =
-        [AiProviderKind.ClaudeCli, AiProviderKind.Anthropic, AiProviderKind.OpenAiCompatible];
-
-    /// <summary>Anthropic's endpoint is fixed; only the OpenAI-compatible adapter takes a base URL.</summary>
-    public bool IsBaseUrlRelevant => AiProvider is AiProviderKind.OpenAiCompatible;
-
-    /// <summary>Claude Code carries its own credentials, so it has no key to enter.</summary>
-    public bool IsApiKeyRelevant => AiProvider is not AiProviderKind.ClaudeCli;
-
-    /// <summary>Explains what the chosen provider needs — including whether it was actually found.</summary>
-    public string AiProviderNote => AiProvider switch
-    {
-        AiProviderKind.ClaudeCli => ClaudeCliLocator.Find() is { } path
-            ? $"Found at {path}. Already signed in, so no key or model is needed. Usage counts against your Claude Code plan."
-            : "Claude Code was not found on this machine. Install it, or pick another provider.",
-        AiProviderKind.Anthropic => "Uses Anthropic's API directly. Needs a key and API credit.",
-        _ => "Any OpenAI-compatible endpoint. Leave the key blank for a local provider such as Ollama.",
-    };
 
     [RelayCommand]
     private void OpenBranchPalette()
@@ -158,41 +105,22 @@ public partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task CheckGitAvailabilityAsync()
     {
+        // Probes are not cancelled, so an older, slower one can finish after a newer one; the
+        // counter keeps its stale result from overwriting the answer for the current path.
+        var probe = ++_gitProbeVersion;
+
         GitStatus = "Checking for Git...";
 
         var availability = await _gitExecutableService.CheckAvailabilityAsync(GitExecutablePath);
+
+        if (probe != _gitProbeVersion)
+        {
+            return;
+        }
+
         GitStatus = availability.IsAvailable
             ? $"Found: {availability.Version}"
             : "Git not found. Set the path below or install Git and ensure it's on PATH.";
-    }
-
-    private HotkeyEditorViewModel CreateEditor(IGlobalHotkeyService hotkeyService, HotkeyAction action, string label) =>
-        new(label,
-            hotkeyService.GetHotkey(action),
-            hotkeyService.GetLastResult(action),
-            gesture =>
-            {
-                Persist(action, gesture);
-                return hotkeyService.Apply(action, gesture);
-            });
-
-    private void Persist(HotkeyAction action, KeyGesture? gesture)
-    {
-        // The stored form is KeyGesture.ToString(), which is what Hotkeys.TryParse reads back.
-        var stored = gesture?.ToString();
-
-        switch (action)
-        {
-            case HotkeyAction.Branches:
-                _settingsService.Settings.BranchHotkey = stored;
-                break;
-
-            case HotkeyAction.Commit:
-                _settingsService.Settings.CommitHotkey = stored;
-                break;
-        }
-
-        _settingsService.Save();
     }
 
     partial void OnRepositoryPathChanged(string? value)
@@ -205,109 +133,6 @@ public partial class SettingsViewModel : ObservableObject
     {
         _settingsService.Settings.PublishNewBranchesToRemote = value;
         _settingsService.Save();
-    }
-
-    partial void OnIsAiEnabledChanged(bool value)
-    {
-        _settingsService.Settings.Ai.IsEnabled = value;
-        _settingsService.Save();
-    }
-
-    partial void OnAiProviderChanged(AiProviderKind value)
-    {
-        var settings = _settingsService.Settings.Ai;
-        settings.Provider = value;
-
-        // Model names are provider-specific, so carry the switch through to something that works
-        // rather than leaving an Anthropic model pointed at an OpenAI endpoint.
-        AiModel = value switch
-        {
-            // Claude Code uses whatever it is configured for; an empty box means "don't override".
-            AiProviderKind.ClaudeCli => string.Empty,
-            AiProviderKind.Anthropic when !AiModel.StartsWith("claude", StringComparison.OrdinalIgnoreCase)
-                => AiGenerationOptions.DefaultAnthropicModel,
-            _ => AiModel,
-        };
-
-        _settingsService.Save();
-        AiKeyStatus = DescribeKey();
-    }
-
-    partial void OnAiModelChanged(string value)
-    {
-        _settingsService.Settings.Ai.Model = value;
-        _settingsService.Save();
-    }
-
-    partial void OnAiBaseUrlChanged(string? value)
-    {
-        _settingsService.Settings.Ai.BaseUrl = value;
-        _settingsService.Save();
-    }
-
-    partial void OnAiApiKeyChanged(string value)
-    {
-        if (value.Length == 0)
-        {
-            return;
-        }
-
-        if (!_secretProtector.IsSupported)
-        {
-            AiKeyStatus = "This platform has no secret store, so the key cannot be saved. Use an environment variable instead.";
-            return;
-        }
-
-        _settingsService.Settings.Ai.ProtectedApiKey = _secretProtector.Protect(value);
-        _settingsService.Save();
-
-        // Drop the plaintext from the box now that it is stored, so it is not left on screen.
-        AiApiKey = string.Empty;
-        AiKeyStatus = "Key saved, encrypted for this Windows account.";
-    }
-
-    /// <summary>Fills in a local Ollama, which needs no key and keeps the diff on this machine.</summary>
-    [RelayCommand]
-    private void UseOllamaPreset()
-    {
-        AiProvider = AiProviderKind.OpenAiCompatible;
-        AiBaseUrl = "http://localhost:11434/v1";
-        AiModel = "qwen2.5-coder";
-
-        ClearAiApiKey();
-        AiKeyStatus = "Pointed at a local Ollama. No key needed — pull the model with: ollama pull qwen2.5-coder";
-    }
-
-    [RelayCommand]
-    private void ClearAiApiKey()
-    {
-        _settingsService.Settings.Ai.ProtectedApiKey = null;
-        _settingsService.Save();
-
-        AiApiKey = string.Empty;
-        AiKeyStatus = DescribeKey();
-    }
-
-    /// <summary>
-    /// Reports where the key would come from without ever showing it — a stored key, the provider's
-    /// environment variable, or nothing.
-    /// </summary>
-    private string DescribeKey()
-    {
-        if (_settingsService.Settings.Ai.ProtectedApiKey is not null)
-        {
-            return "A key is stored, encrypted for this Windows account.";
-        }
-
-        var variable = _settingsService.Settings.Ai.Provider switch
-        {
-            AiProviderKind.Anthropic => "ANTHROPIC_API_KEY",
-            _ => "OPENAI_API_KEY",
-        };
-
-        return Environment.GetEnvironmentVariable(variable) is not null
-            ? $"No key stored. Using {variable} from the environment."
-            : $"No key. Enter one above, or set {variable}.";
     }
 
     partial void OnGitExecutablePathChanged(string? value)

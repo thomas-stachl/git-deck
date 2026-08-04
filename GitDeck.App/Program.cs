@@ -1,4 +1,5 @@
 ﻿using Avalonia;
+using GitDeck.App.Logging;
 using GitDeck.App.Services;
 using GitDeck.App.ViewModels;
 using GitDeck.App.Views.Run;
@@ -8,7 +9,9 @@ using GitDeck.Git;
 using GitDeck.Git.Generation;
 using GitDeck.Git.Repositories;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using System;
+using System.Threading.Tasks;
 
 namespace GitDeck.App;
 
@@ -20,9 +23,31 @@ sealed class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        var services = new Program().ConfigureServices();
+        // Disposing the provider on the way out is what runs the singletons' Dispose methods:
+        // the hotkey thread unregisters its Win32 registrations, and the settings service flushes
+        // any pending debounced save.
+        using var services = new Program().ConfigureServices();
+
+        RegisterGlobalExceptionLogging(services.GetRequiredService<ILogger<Program>>());
 
         BuildAvaloniaApp(services).StartWithClassicDesktopLifetime(args);
+    }
+
+    /// <summary>
+    /// Last-resort logging for the paths nothing else observes. Neither handler can prevent the
+    /// failure — but without them a crash of a tray app leaves no trace at all.
+    /// </summary>
+    private static void RegisterGlobalExceptionLogging(ILogger logger)
+    {
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            logger.LogCritical(e.ExceptionObject as Exception,
+                "Unhandled exception (terminating: {IsTerminating}).", e.IsTerminating);
+
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            logger.LogError(e.Exception, "Unobserved task exception.");
+            e.SetObserved();
+        };
     }
 
     // Avalonia configuration, don't remove; also used by visual designer.
@@ -42,14 +67,20 @@ sealed class Program
             .WithInterFont()
             .LogToTrace();
 
-    private IServiceProvider ConfigureServices()
+    private ServiceProvider ConfigureServices()
     {
         var services = new ServiceCollection();
 
+        services.AddLogging(builder =>
+        {
+            builder.SetMinimumLevel(LogLevel.Information);
+            builder.AddProvider(new FileLoggerProvider(FileLoggerProvider.DefaultLogFilePath));
+        });
+
         services.AddSingleton<SettingsViewModel>();
+        services.AddSingleton<AiSettingsViewModel>();
+        services.AddSingleton<HotkeySettingsViewModel>();
         services.AddSingleton<SettingsWindow>();
-        services.AddSingleton<SettingsView>();
-        services.AddSingleton<ViewLocator>();
 
         services.AddSingleton<RunViewModel>();
         services.AddSingleton<RunWindow>();
@@ -57,7 +88,9 @@ sealed class Program
         services.AddSingleton<ISettingsWindowService, SettingsWindowService>();
 
         services.AddSingleton<IProcessRunner, ProcessRunner>();
-        services.AddSingleton<ISettingsService, SettingsService>();
+        services.AddSingleton<ISettingsService>(provider => new SettingsService(
+            SettingsService.DefaultSettingsFilePath,
+            provider.GetRequiredService<ILogger<SettingsService>>()));
         services.AddSingleton<IFilePickerService, FilePickerService>();
         services.AddSingleton<IGitExecutableService, GitExecutableService>();
         services.AddSingleton<IBranchService, BranchService>();

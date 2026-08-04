@@ -1,10 +1,20 @@
 using LibGit2Sharp;
-using LibGit2SharpRepository = LibGit2Sharp.Repository;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace GitDeck.Git.Repositories;
 
-public sealed class BranchService(IGitExecutableService gitExecutableService) : IBranchService
+/// <summary>
+/// Reads run through LibGit2Sharp, which is fast and needs no configuration. Mutations — switching
+/// and creating branches — run through git.exe instead: libgit2 checkouts skip hooks and
+/// clean/smudge filters, which writes pointer files into an LFS working tree.
+/// </summary>
+public sealed class BranchService(
+    IGitExecutableService gitExecutableService,
+    ILogger<BranchService>? logger = null) : IBranchService
 {
+    private readonly ILogger<BranchService> _logger = logger ?? NullLogger<BranchService>.Instance;
+
     public Task<RepositoryOverview> GetOverviewAsync(string? repositoryPath, CancellationToken cancellationToken = default)
         => Task.Run(() => GetOverview(repositoryPath), cancellationToken);
 
@@ -25,139 +35,152 @@ public sealed class BranchService(IGitExecutableService gitExecutableService) : 
             return CreateBranchResult.Failed($"\"{request.BranchName}\" is not a valid branch name.");
         }
 
-        var creation = await Task.Run(() => CreateLocalBranch(request), cancellationToken);
+        var preflight = await Task.Run(() => PrepareCreate(request), cancellationToken).ConfigureAwait(false);
 
-        if (!creation.Result.IsCreated || !request.PublishToRemote)
+        if (preflight.Error is not null)
         {
-            return creation.Result;
+            return CreateBranchResult.Failed(preflight.Error);
         }
 
-        if (creation.RemoteName is null)
+        var create = await gitExecutableService.RunAsync(
+            preflight.WorkingDirectory,
+            ["switch", "-c", request.BranchName],
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        if (!create.IsSuccess)
+        {
+            return CreateBranchResult.Failed(create.FailureMessage ?? "Could not create the branch.");
+        }
+
+        if (!request.PublishToRemote)
+        {
+            return new CreateBranchResult(true, false, null);
+        }
+
+        if (preflight.RemoteName is null)
         {
             return new CreateBranchResult(true, false, "Created locally. The repository has no remote to publish to.");
         }
 
         var push = await gitExecutableService.RunAsync(
-            request.GitExecutablePath,
-            creation.WorkingDirectory,
-            ["push", "--set-upstream", creation.RemoteName, request.BranchName],
-            cancellationToken);
+            preflight.WorkingDirectory,
+            ["push", "--set-upstream", preflight.RemoteName, request.BranchName],
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return push.IsSuccess
             ? new CreateBranchResult(true, true, null)
             : new CreateBranchResult(true, false, $"Created locally, but publishing failed: {push.FailureMessage}");
     }
 
-    public Task<SwitchBranchResult> SwitchBranchAsync(SwitchBranchRequest request, CancellationToken cancellationToken = default)
-        => Task.Run(() => SwitchBranch(request), cancellationToken);
+    public async Task<SwitchBranchResult> SwitchBranchAsync(SwitchBranchRequest request, CancellationToken cancellationToken = default)
+    {
+        var preflight = await Task.Run(() => PrepareSwitch(request), cancellationToken).ConfigureAwait(false);
 
-    private static SwitchBranchResult SwitchBranch(SwitchBranchRequest request)
+        if (preflight.Error is not null)
+        {
+            return SwitchBranchResult.Failed(preflight.Error);
+        }
+
+        // --track pins the new local branch to the exact remote branch that was picked in the list,
+        // instead of leaving `git switch` to guess between remotes that share the name.
+        string[] arguments = preflight.CreatesLocalBranch
+            ? ["switch", "--track", request.Branch.Name]
+            : ["switch", preflight.TargetName!];
+
+        var result = await gitExecutableService.RunAsync(
+            preflight.WorkingDirectory,
+            arguments,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        return result.IsSuccess
+            ? new SwitchBranchResult(true, preflight.CreatesLocalBranch, null)
+            : SwitchBranchResult.Failed(result.FailureMessage ?? "Could not switch branches.");
+    }
+
+    private sealed record SwitchPreflight(
+        string? Error,
+        string? WorkingDirectory = null,
+        string? TargetName = null,
+        bool CreatesLocalBranch = false);
+
+    private static SwitchPreflight PrepareSwitch(SwitchBranchRequest request)
     {
         var gitDirectory = TryDiscover(request.RepositoryPath);
         if (gitDirectory is null)
         {
-            return SwitchBranchResult.Failed("No repository found. Check the repository path in Settings.");
+            return new SwitchPreflight("No repository found. Check the repository path in Settings.");
         }
 
         try
         {
-            using var repository = new LibGit2SharpRepository(gitDirectory);
+            using var repository = new Repository(gitDirectory);
 
             if (repository.Info.IsBare)
             {
-                return SwitchBranchResult.Failed("Cannot switch branches in a bare repository.");
+                return new SwitchPreflight("Cannot switch branches in a bare repository.");
             }
 
-            return request.Branch.IsRemote
-                ? SwitchToRemoteBranch(repository, request.Branch)
-                : SwitchToLocalBranch(repository, request.Branch);
+            var workingDirectory = repository.Info.WorkingDirectory;
+
+            if (!request.Branch.IsRemote)
+            {
+                return repository.Branches[request.Branch.Name] is null
+                    ? new SwitchPreflight($"Branch \"{request.Branch.Name}\" no longer exists.")
+                    : new SwitchPreflight(null, workingDirectory, request.Branch.Name);
+            }
+
+            // A local branch of the same short name is switched to rather than failing, matching
+            // what `git switch <name>` would do.
+            var localName = request.Branch.ShortName;
+
+            return repository.Branches[localName] is { IsRemote: false }
+                ? new SwitchPreflight(null, workingDirectory, localName)
+                : new SwitchPreflight(null, workingDirectory, localName, CreatesLocalBranch: true);
         }
         catch (Exception ex) when (ex is LibGit2SharpException or IOException or UnauthorizedAccessException or ArgumentException)
         {
-            return SwitchBranchResult.Failed(ex.Message);
+            return new SwitchPreflight(ex.Message);
         }
     }
 
-    private static SwitchBranchResult SwitchToLocalBranch(LibGit2SharpRepository repository, BranchInfo branchInfo)
-    {
-        if (repository.Branches[branchInfo.Name] is not { } branch)
-        {
-            return SwitchBranchResult.Failed($"Branch \"{branchInfo.Name}\" no longer exists.");
-        }
+    private sealed record CreatePreflight(string? Error, string? WorkingDirectory = null, string? RemoteName = null);
 
-        Commands.Checkout(repository, branch);
-
-        return new SwitchBranchResult(true, false, null);
-    }
-
-    private static SwitchBranchResult SwitchToRemoteBranch(LibGit2SharpRepository repository, BranchInfo branchInfo)
-    {
-        if (repository.Branches[branchInfo.Name] is not { } remoteBranch)
-        {
-            return SwitchBranchResult.Failed($"Remote branch \"{branchInfo.Name}\" no longer exists.");
-        }
-
-        var localName = branchInfo.ShortName;
-        var existingLocal = repository.Branches[localName];
-
-        if (existingLocal is not null)
-        {
-            // A local branch of that name already exists; switch to it rather than fail, matching
-            // what `git switch <name>` would do.
-            Commands.Checkout(repository, existingLocal);
-            return new SwitchBranchResult(true, false, null);
-        }
-
-        var localBranch = repository.CreateBranch(localName, remoteBranch.Tip);
-        localBranch = repository.Branches.Update(localBranch, branch => branch.TrackedBranch = remoteBranch.CanonicalName);
-
-        Commands.Checkout(repository, localBranch);
-
-        return new SwitchBranchResult(true, true, null);
-    }
-
-    private static LocalCreation CreateLocalBranch(CreateBranchRequest request)
+    private static CreatePreflight PrepareCreate(CreateBranchRequest request)
     {
         var gitDirectory = TryDiscover(request.RepositoryPath);
         if (gitDirectory is null)
         {
-            return LocalCreation.Failed("No repository found. Check the repository path in Settings.");
+            return new CreatePreflight("No repository found. Check the repository path in Settings.");
         }
 
         try
         {
-            using var repository = new LibGit2SharpRepository(gitDirectory);
+            using var repository = new Repository(gitDirectory);
 
             if (repository.Info.IsBare)
             {
-                return LocalCreation.Failed("Cannot switch branches in a bare repository.");
+                return new CreatePreflight("Cannot create a branch in a bare repository.");
             }
 
             if (repository.Info.IsHeadUnborn)
             {
-                return LocalCreation.Failed("The repository has no commits yet, so there is nothing to branch from.");
+                return new CreatePreflight("The repository has no commits yet, so there is nothing to branch from.");
             }
 
             if (repository.Branches[request.BranchName] is not null)
             {
-                return LocalCreation.Failed($"Branch \"{request.BranchName}\" already exists.");
+                return new CreatePreflight($"Branch \"{request.BranchName}\" already exists.");
             }
 
-            var branch = repository.CreateBranch(request.BranchName);
-            Commands.Checkout(repository, branch);
-
-            return new LocalCreation(
-                new CreateBranchResult(true, false, null),
-                repository.Info.WorkingDirectory,
-                PreferredRemoteName(repository));
+            return new CreatePreflight(null, repository.Info.WorkingDirectory, PreferredRemoteName(repository));
         }
         catch (Exception ex) when (ex is LibGit2SharpException or IOException or UnauthorizedAccessException or ArgumentException)
         {
-            return LocalCreation.Failed(ex.Message);
+            return new CreatePreflight(ex.Message);
         }
     }
 
-    private static RepositoryOverview GetOverview(string? repositoryPath)
+    private RepositoryOverview GetOverview(string? repositoryPath)
     {
         var gitDirectory = TryDiscover(repositoryPath);
         if (gitDirectory is null)
@@ -167,7 +190,7 @@ public sealed class BranchService(IGitExecutableService gitExecutableService) : 
 
         try
         {
-            using var repository = new LibGit2SharpRepository(gitDirectory);
+            using var repository = new Repository(gitDirectory);
 
             return new RepositoryOverview(
                 true,
@@ -183,11 +206,14 @@ public sealed class BranchService(IGitExecutableService gitExecutableService) : 
         }
         catch (Exception ex) when (ex is LibGit2SharpException or IOException or UnauthorizedAccessException or ArgumentException)
         {
-            return RepositoryOverview.NotARepository;
+            // A permission problem or corrupt index is not "not a repository" — carry the reason
+            // so the UI can show it instead of a misleading default.
+            _logger.LogError(ex, "Could not read the repository at {Path}.", repositoryPath);
+            return RepositoryOverview.Failed(ex.Message);
         }
     }
 
-    private static string DescribeHead(LibGit2SharpRepository repository)
+    private static string DescribeHead(Repository repository)
     {
         var head = repository.Head;
 
@@ -201,20 +227,22 @@ public sealed class BranchService(IGitExecutableService gitExecutableService) : 
             : head.FriendlyName;
     }
 
-    private static IReadOnlyList<ChangedFile> GetChangedFiles(LibGit2SharpRepository repository)
+    private static IReadOnlyList<ChangedFile> GetChangedFiles(Repository repository)
     {
         if (repository.Info.IsBare)
         {
             return [];
         }
 
-        // Kept deliberately cheap: rename detection and walking into untracked directories are the
-        // expensive parts of a status, and neither changes what git itself reports by default.
+        // Rename detection stays off — it is the expensive part of a status and does not change
+        // what git itself reports by default. Untracked directories are walked, though: the commit
+        // stages files, so every file has to be listed and tickable individually rather than
+        // hidden behind one "dir/" entry.
         var status = repository.RetrieveStatus(new StatusOptions
         {
             IncludeIgnored = false,
             IncludeUntracked = true,
-            RecurseUntrackedDirs = false,
+            RecurseUntrackedDirs = true,
             DetectRenamesInIndex = false,
             DetectRenamesInWorkDir = false,
         });
@@ -280,7 +308,7 @@ public sealed class BranchService(IGitExecutableService gitExecutableService) : 
 
         try
         {
-            return LibGit2SharpRepository.Discover(repositoryPath);
+            return Repository.Discover(repositoryPath);
         }
         catch (Exception ex) when (ex is LibGit2SharpException or IOException or UnauthorizedAccessException or ArgumentException)
         {
@@ -288,7 +316,7 @@ public sealed class BranchService(IGitExecutableService gitExecutableService) : 
         }
     }
 
-    private static string? PreferredRemoteName(LibGit2SharpRepository repository)
+    private static string? PreferredRemoteName(Repository repository)
     {
         var remotes = repository.Network.Remotes.ToList();
 
@@ -305,9 +333,4 @@ public sealed class BranchService(IGitExecutableService gitExecutableService) : 
     // "origin/HEAD" is a symbolic alias for the remote's default branch, not a branch of its own.
     private static bool IsRemoteHead(Branch branch) =>
         branch.IsRemote && branch.FriendlyName.EndsWith("/HEAD", StringComparison.Ordinal);
-
-    private sealed record LocalCreation(CreateBranchResult Result, string? WorkingDirectory, string? RemoteName)
-    {
-        public static LocalCreation Failed(string errorMessage) => new(CreateBranchResult.Failed(errorMessage), null, null);
-    }
 }

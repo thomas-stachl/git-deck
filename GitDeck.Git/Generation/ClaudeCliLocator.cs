@@ -8,31 +8,11 @@ public static class ClaudeCliLocator
     private static readonly string[] ExecutableNames =
         OperatingSystem.IsWindows() ? ["claude.exe", "claude.cmd", "claude.bat"] : ["claude"];
 
-    private static string? _cached;
-    private static bool _hasSearched;
-
     /// <summary>The path to the executable, or null when Claude Code is not installed.</summary>
-    public static string? Find()
-    {
-        // Cached because it is called to decide whether to offer the provider at all, which happens
-        // on every settings read.
-        if (_hasSearched)
-        {
-            return _cached;
-        }
-
-        _cached = Search();
-        _hasSearched = true;
-
-        return _cached;
-    }
-
-    /// <summary>Forgets the cached result, for when the user installs Claude Code without restarting.</summary>
-    public static void Invalidate()
-    {
-        _hasSearched = false;
-        _cached = null;
-    }
+    // Deliberately uncached: the search is a handful of File.Exists probes, and the cache it used
+    // to have was unsynchronised static state whose invalidation hook nothing ever called — so an
+    // install made mid-session was never picked up.
+    public static string? Find() => Search();
 
     private static string? Search()
     {
