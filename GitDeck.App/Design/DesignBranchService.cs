@@ -24,7 +24,9 @@ internal sealed class DesignBranchService : IBranchService
     ];
 
     public Task<RepositoryOverview> GetOverviewAsync(string? repositoryPath, CancellationToken cancellationToken = default)
-        => Task.FromResult(new RepositoryOverview(true, @"C:\Repos\GitDeck", "main", ChangedFiles, Branches));
+        => Task.FromResult(new RepositoryOverview(
+            true, @"C:\Repos\GitDeck", "main", ChangedFiles, Branches,
+            HasUpstream: true, AheadBy: 1, BehindBy: 3));
 
     public bool IsValidBranchName(string branchName) => !string.IsNullOrWhiteSpace(branchName);
 
@@ -33,4 +35,10 @@ internal sealed class DesignBranchService : IBranchService
 
     public Task<SwitchBranchResult> SwitchBranchAsync(SwitchBranchRequest request, CancellationToken cancellationToken = default)
         => Task.FromResult(new SwitchBranchResult(true, request.Branch.IsRemote, null));
+
+    public Task<FetchResult> FetchAsync(string? repositoryPath, CancellationToken cancellationToken = default)
+        => Task.FromResult(new FetchResult(true, null));
+
+    public Task<PullResult> PullCurrentBranchAsync(string? repositoryPath, CancellationToken cancellationToken = default)
+        => Task.FromResult(new PullResult(true, null));
 }

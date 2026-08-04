@@ -97,6 +97,74 @@ public sealed class BranchService(
             : SwitchBranchResult.Failed(result.FailureMessage ?? "Could not switch branches.");
     }
 
+    public async Task<FetchResult> FetchAsync(string? repositoryPath, CancellationToken cancellationToken = default)
+    {
+        var preflight = await Task.Run(
+            () => PrepareWorkingDirectory(repositoryPath, "This repository has no working tree to fetch into."),
+            cancellationToken).ConfigureAwait(false);
+
+        if (preflight.Error is not null)
+        {
+            return FetchResult.Failed(preflight.Error);
+        }
+
+        var fetch = await gitExecutableService.RunAsync(
+            preflight.WorkingDirectory,
+            ["fetch", "--prune"],
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        return fetch.IsSuccess
+            ? new FetchResult(true, null)
+            : FetchResult.Failed(fetch.FailureMessage ?? "Fetch failed.");
+    }
+
+    public async Task<PullResult> PullCurrentBranchAsync(string? repositoryPath, CancellationToken cancellationToken = default)
+    {
+        var preflight = await Task.Run(
+            () => PrepareWorkingDirectory(repositoryPath, "This repository has no working tree to pull into."),
+            cancellationToken).ConfigureAwait(false);
+
+        if (preflight.Error is not null)
+        {
+            return PullResult.Failed(preflight.Error);
+        }
+
+        // --ff-only, deliberately: a merge or rebase is a judgment call this palette should not make
+        // on its own. Diverged history surfaces as a clean failure instead.
+        var pull = await gitExecutableService.RunAsync(
+            preflight.WorkingDirectory,
+            ["pull", "--ff-only"],
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        return pull.IsSuccess
+            ? new PullResult(true, null)
+            : PullResult.Failed(pull.FailureMessage ?? "Could not pull the latest changes.");
+    }
+
+    private sealed record WorkingDirectoryPreflight(string? Error, string? WorkingDirectory = null);
+
+    private static WorkingDirectoryPreflight PrepareWorkingDirectory(string? repositoryPath, string noWorkingTreeMessage)
+    {
+        var gitDirectory = TryDiscover(repositoryPath);
+        if (gitDirectory is null)
+        {
+            return new WorkingDirectoryPreflight("No repository found. Check the repository path in Settings.");
+        }
+
+        try
+        {
+            using var repository = new Repository(gitDirectory);
+
+            return repository.Info.IsBare
+                ? new WorkingDirectoryPreflight(noWorkingTreeMessage)
+                : new WorkingDirectoryPreflight(null, repository.Info.WorkingDirectory);
+        }
+        catch (Exception ex) when (ex is LibGit2SharpException or IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return new WorkingDirectoryPreflight(ex.Message);
+        }
+    }
+
     private sealed record SwitchPreflight(
         string? Error,
         string? WorkingDirectory = null,
@@ -192,6 +260,8 @@ public sealed class BranchService(
         {
             using var repository = new Repository(gitDirectory);
 
+            var tracking = DescribeTracking(repository);
+
             return new RepositoryOverview(
                 true,
                 TrimSeparator(repository.Info.WorkingDirectory),
@@ -202,7 +272,10 @@ public sealed class BranchService(
                     .Select(ToBranchInfo)
                     .OrderByDescending(branch => branch.IsCurrent)
                     .ThenBy(branch => branch.IsRemote)
-                    .ThenBy(branch => branch.Name, StringComparer.OrdinalIgnoreCase)]);
+                    .ThenBy(branch => branch.Name, StringComparer.OrdinalIgnoreCase)],
+                HasUpstream: tracking.HasUpstream,
+                AheadBy: tracking.AheadBy,
+                BehindBy: tracking.BehindBy);
         }
         catch (Exception ex) when (ex is LibGit2SharpException or IOException or UnauthorizedAccessException or ArgumentException)
         {
@@ -225,6 +298,24 @@ public sealed class BranchService(
         return repository.Info.IsHeadDetached
             ? $"detached at {head.Tip.Sha[..7]}"
             : head.FriendlyName;
+    }
+
+    /// <summary>
+    /// How far the current branch is from its upstream. This reads the local remote-tracking ref —
+    /// it reflects whatever was fetched last, not a live network check.
+    /// </summary>
+    private static (bool HasUpstream, int AheadBy, int BehindBy) DescribeTracking(Repository repository)
+    {
+        if (repository.Info.IsBare || repository.Info.IsHeadUnborn || repository.Info.IsHeadDetached)
+        {
+            return (false, 0, 0);
+        }
+
+        var head = repository.Head;
+
+        return head.IsTracking
+            ? (true, head.TrackingDetails.AheadBy ?? 0, head.TrackingDetails.BehindBy ?? 0)
+            : (false, 0, 0);
     }
 
     private static IReadOnlyList<ChangedFile> GetChangedFiles(Repository repository)

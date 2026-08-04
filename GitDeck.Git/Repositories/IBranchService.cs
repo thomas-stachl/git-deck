@@ -25,4 +25,18 @@ public interface IBranchService
     /// remote; an already existing local branch of that name is switched to instead.
     /// </summary>
     Task<SwitchBranchResult> SwitchBranchAsync(SwitchBranchRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Updates remote-tracking branches without touching the working tree — the equivalent of
+    /// <c>git fetch --prune</c>. Meant for a background refresh: being offline or having no cached
+    /// credentials are ordinary outcomes here, not failures worth interrupting anyone for.
+    /// </summary>
+    Task<FetchResult> FetchAsync(string? repositoryPath, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Fast-forwards the current branch from its upstream — <c>git pull --ff-only</c>. Fails cleanly,
+    /// rather than merging or rebasing, when history has diverged: that is a judgment call for a real
+    /// git client, not something a quick-launch palette should attempt on its own.
+    /// </summary>
+    Task<PullResult> PullCurrentBranchAsync(string? repositoryPath, CancellationToken cancellationToken = default);
 }

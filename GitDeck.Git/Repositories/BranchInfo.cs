@@ -30,13 +30,24 @@ public sealed record BranchInfo(string Name, bool IsRemote, string? RemoteName, 
 /// a repository — a permission problem or a corrupt index should not be reported as "not a Git
 /// repository".
 /// </param>
+/// <param name="HasUpstream">Whether the current branch has a remote-tracking branch configured.</param>
+/// <param name="AheadBy">
+/// Commits on the current branch not yet on its upstream. Zero when there is no upstream.
+/// </param>
+/// <param name="BehindBy">
+/// Commits on the upstream not yet on the current branch — as of the last fetch, not a live network
+/// check. Zero when there is no upstream.
+/// </param>
 public sealed record RepositoryOverview(
     bool IsRepository,
     string? WorkingDirectory,
     string? Head,
     IReadOnlyList<ChangedFile> ChangedFiles,
     IReadOnlyList<BranchInfo> Branches,
-    string? LoadError = null)
+    string? LoadError = null,
+    bool HasUpstream = false,
+    int AheadBy = 0,
+    int BehindBy = 0)
 {
     public static readonly RepositoryOverview NotARepository = new(false, null, null, [], []);
 

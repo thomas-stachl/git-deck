@@ -85,10 +85,17 @@ public partial class RunViewModel : ObservableObject
     public partial string HeadDisplay { get; set; } = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasUpstreamDisplay))]
+    public partial string UpstreamDisplay { get; set; } = string.Empty;
+
+    [ObservableProperty]
     public partial string ChangesDisplay { get; set; } = string.Empty;
 
     /// <summary>Keeps the branch icon from standing alone before the repository has been read.</summary>
     public bool HasHead => HeadDisplay.Length > 0;
+
+    /// <summary>Hidden entirely when the current branch has no upstream to compare against.</summary>
+    public bool HasUpstreamDisplay => UpstreamDisplay.Length > 0;
 
     /// <summary>Whether the active mode is mid-operation, which should hold the window open.</summary>
     public bool IsBusy => ActivePalette.IsBusy;
@@ -175,6 +182,65 @@ public partial class RunViewModel : ObservableObject
 
         Branches.OnRepositoryLoaded(_repository);
         Commit.OnRepositoryLoaded(_repository);
+
+        if (_repository.IsRepository)
+        {
+            _ = RefreshAfterFetchAsync(cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Fetches in the background, after the palette has already opened against local state, then
+    /// quietly re-reads the repository so ahead/behind counts and the remote branch list catch up.
+    /// Only the branch palette is re-notified: fetch never touches the working tree, and re-running
+    /// the commit palette's read here would reset any files the user has already ticked. Runs
+    /// fire-and-forget — being offline or having no cached credentials are ordinary outcomes here,
+    /// not failures worth interrupting anyone for, so a failed fetch is simply dropped.
+    /// </summary>
+    private async Task RefreshAfterFetchAsync(CancellationToken cancellationToken)
+    {
+        FetchResult fetch;
+
+        try
+        {
+            fetch = await _branchService.FetchAsync(_settingsService.Settings.RepositoryPath, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception)
+        {
+            return;
+        }
+
+        if (!fetch.IsDone || cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        try
+        {
+            _repository = await _branchService.GetOverviewAsync(_settingsService.Settings.RepositoryPath, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception)
+        {
+            // The repository read just succeeded moments ago; a failure here is not worth
+            // overwriting a working footer with an error for.
+            return;
+        }
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        UpdateRepositoryInfo();
+        Branches.OnRepositoryLoaded(_repository);
     }
 
     /// <summary>
@@ -195,6 +261,7 @@ public partial class RunViewModel : ObservableObject
             ? "No repository configured"
             : ShortenPath(configuredPath);
         HeadDisplay = string.Empty;
+        UpstreamDisplay = string.Empty;
         ChangesDisplay = string.Empty;
     }
 
@@ -212,6 +279,7 @@ public partial class RunViewModel : ObservableObject
         };
 
         HeadDisplay = _repository.Head ?? string.Empty;
+        UpstreamDisplay = DescribeUpstream(_repository);
 
         // "no changes" would read as a fact about a repository that is not there.
         ChangesDisplay = !_repository.IsRepository
@@ -222,6 +290,26 @@ public partial class RunViewModel : ObservableObject
                 1 => "1 changed file",
                 var count => $"{count} changed files",
             };
+    }
+
+    /// <summary>
+    /// "↓3 ↑1" for diverged history, "up to date" once neither, or empty when there is no upstream to
+    /// compare against at all — in which case the footer column collapses instead of showing this.
+    /// </summary>
+    private static string DescribeUpstream(RepositoryOverview repository)
+    {
+        if (!repository.IsRepository || !repository.HasUpstream)
+        {
+            return string.Empty;
+        }
+
+        return (repository.BehindBy, repository.AheadBy) switch
+        {
+            (0, 0) => "up to date",
+            (var behind, 0) => $"↓{behind}",
+            (0, var ahead) => $"↑{ahead}",
+            (var behind, var ahead) => $"↓{behind} ↑{ahead}",
+        };
     }
 
     /// <summary>

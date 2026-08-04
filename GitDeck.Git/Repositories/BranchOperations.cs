@@ -30,3 +30,15 @@ public sealed record SwitchBranchResult(bool IsSwitched, bool CreatedLocalBranch
 {
     public static SwitchBranchResult Failed(string errorMessage) => new(false, false, errorMessage);
 }
+
+/// <summary>Result of updating remote-tracking branches — <c>git fetch --prune</c>.</summary>
+public sealed record FetchResult(bool IsDone, string? ErrorMessage)
+{
+    public static FetchResult Failed(string errorMessage) => new(false, errorMessage);
+}
+
+/// <summary>Result of fast-forwarding the current branch from its upstream.</summary>
+public sealed record PullResult(bool IsPulled, string? ErrorMessage)
+{
+    public static PullResult Failed(string errorMessage) => new(false, errorMessage);
+}

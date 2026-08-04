@@ -16,6 +16,9 @@ public enum RunResultKind
 
     /// <summary>Create a branch named after the entered text and switch to it.</summary>
     CreateBranch,
+
+    /// <summary>Fast-forward the current branch from its upstream.</summary>
+    Pull,
 }
 
 public sealed record RunResult(RunResultKind Kind, string Title, string Subtitle, string Icon, string BranchName, BranchInfo? Branch = null);
@@ -77,6 +80,7 @@ public partial class BranchPaletteViewModel(
         {
             RunResultKind.CreateBranch => await CreateBranchAsync(result),
             RunResultKind.Branch => await SwitchBranchAsync(result),
+            RunResultKind.Pull => await PullAsync(),
             _ => false,
         };
     }
@@ -130,6 +134,23 @@ public partial class BranchPaletteViewModel(
         });
     }
 
+    /// <summary>
+    /// Fast-forwards the current branch from its upstream. Offered only when the repository overview
+    /// says there is something to pull, so <see cref="SelectedResult"/> is always non-null here.
+    /// </summary>
+    private Task<bool> PullAsync()
+    {
+        var busyMessage = _repository.BehindBy == 1
+            ? "Pulling 1 commit..."
+            : $"Pulling {_repository.BehindBy} commits...";
+
+        return RunOperationAsync(busyMessage, "Could not pull the latest changes.", async token =>
+        {
+            var pull = await branchService.PullCurrentBranchAsync(settingsService.Settings.RepositoryPath, token);
+            return (pull.IsPulled, pull.ErrorMessage);
+        });
+    }
+
     partial void OnSearchTextChanged(string value) => UpdateResults(value);
 
     private void UpdateResults(string searchText)
@@ -143,8 +164,12 @@ public partial class BranchPaletteViewModel(
 
         if (query.Length == 0)
         {
-            Results = [];
-            SelectedIndex = -1;
+            // The one moment this offers anything unprompted: an empty search box is the palette's
+            // resting state, so a pull that's actually available surfaces right there instead of
+            // waiting to be found.
+            var pull = CreatePullResultOrNull();
+            Results = pull is null ? [] : [pull];
+            SelectedIndex = Results.Count > 0 ? 0 : -1;
             StatusMessage = null;
             return;
         }
@@ -204,6 +229,25 @@ public partial class BranchPaletteViewModel(
         return branchService.IsValidBranchName(query)
             ? $"No branch matches \"{query}\"."
             : $"\"{query}\" is not a valid branch name.";
+    }
+
+    /// <summary>
+    /// Offered only when there is somewhere to pull from and something to pull — no upstream, or an
+    /// upstream already caught up, means nothing is shown.
+    /// </summary>
+    private RunResult? CreatePullResultOrNull()
+    {
+        if (!_repository.IsRepository || !_repository.HasUpstream || _repository.BehindBy == 0)
+        {
+            return null;
+        }
+
+        var branchName = _repository.Head ?? "the current branch";
+        var subtitle = _repository.BehindBy == 1
+            ? "Pull · 1 commit behind the upstream"
+            : $"Pull · {_repository.BehindBy} commits behind the upstream";
+
+        return new RunResult(RunResultKind.Pull, $"Pull {branchName}", subtitle, "⬇️", branchName);
     }
 
     private RunResult CreateBranchResultEntry(string branchName)
