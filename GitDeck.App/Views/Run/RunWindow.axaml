@@ -25,14 +25,17 @@
             BoxShadow="0 8 32 0 #66000000">
         <StackPanel>
             <!-- Both palettes stay instantiated and are switched by IsActive, so toggling modes by
-                 hotkey never rebuilds a visual tree. -->
+                 hotkey never rebuilds a visual tree.
+
+                 Their DataContext is assigned in the constructor rather than bound here: a bound
+                 DataContext only replaces the inherited one after the control has attached, and in
+                 that window every binding inside the control evaluates against this window's view
+                 model and fails to cast. -->
             <run:BranchPaletteView x:Name="BranchView"
-                                   DataContext="{Binding Branches}"
                                    x:DataType="vm:BranchPaletteViewModel"
                                    IsVisible="{Binding IsActive}" />
 
             <run:CommitPaletteView x:Name="CommitView"
-                                   DataContext="{Binding Commit}"
                                    x:DataType="vm:CommitPaletteViewModel"
                                    IsVisible="{Binding IsActive}" />
 

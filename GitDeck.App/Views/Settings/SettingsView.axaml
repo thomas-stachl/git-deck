@@ -47,34 +47,37 @@
                    Foreground="Gray"
                    TextWrapping="Wrap" />
 
-        <StackPanel Spacing="8" DataContext="{Binding Ai}" x:DataType="vm:AiSettingsViewModel">
+        <!-- Reached through "Ai." rather than a nested DataContext: a bound DataContext is applied
+             only after this panel has attached and inherited the one above, and until then every
+             binding under it evaluates against the wrong view model. -->
+        <StackPanel Spacing="8">
             <TextBlock Text="Commit Message Generation" FontWeight="Bold" Margin="0,16,0,0" />
-            <CheckBox IsChecked="{Binding IsEnabled}"
+            <CheckBox IsChecked="{Binding Ai.IsEnabled}"
                       Content="Let a model write commit messages (Ctrl+G)" />
             <TextBlock Text="Generating a message sends the diff of the selected files to the provider below. Off by default."
                        Foreground="Gray"
                        TextWrapping="Wrap" />
 
-            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" IsEnabled="{Binding IsEnabled}"
+            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" IsEnabled="{Binding Ai.IsEnabled}"
                   Margin="0,4,0,0">
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Provider" VerticalAlignment="Center" Margin="0,0,8,4" />
                 <ComboBox Grid.Row="0" Grid.Column="1"
-                          ItemsSource="{Binding Providers}"
-                          SelectedItem="{Binding Provider}"
+                          ItemsSource="{Binding Ai.Providers}"
+                          SelectedItem="{Binding Ai.Provider}"
                           HorizontalAlignment="Stretch"
                           Margin="0,0,0,4" />
                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Model" VerticalAlignment="Center" Margin="0,0,8,0" />
                 <TextBox Grid.Row="1" Grid.Column="1"
-                         Text="{Binding Model, UpdateSourceTrigger=LostFocus}"
+                         Text="{Binding Ai.Model, UpdateSourceTrigger=LostFocus}"
                          PlaceholderText="Provider default" />
             </Grid>
 
-            <TextBlock Text="{Binding ProviderNote}"
+            <TextBlock Text="{Binding Ai.ProviderNote}"
                        Foreground="Gray"
                        TextWrapping="Wrap" />
 
-            <StackPanel Spacing="8" IsVisible="{Binding IsBaseUrlRelevant}" IsEnabled="{Binding IsEnabled}">
-                <TextBox Text="{Binding BaseUrl, UpdateSourceTrigger=LostFocus}"
+            <StackPanel Spacing="8" IsVisible="{Binding Ai.IsBaseUrlRelevant}" IsEnabled="{Binding Ai.IsEnabled}">
+                <TextBox Text="{Binding Ai.BaseUrl, UpdateSourceTrigger=LostFocus}"
                          PlaceholderText="https://api.openai.com/v1" />
                 <TextBlock Text="Include the version path. Works with OpenAI, Azure OpenAI, OpenRouter, Groq, Mistral, and local Ollama or LM Studio."
                            Foreground="Gray"
@@ -82,24 +85,24 @@
             </StackPanel>
 
             <!-- Claude Code carries its own credentials, so the key row is hidden for it entirely. -->
-            <StackPanel Spacing="8" IsVisible="{Binding IsApiKeyRelevant}" IsEnabled="{Binding IsEnabled}">
+            <StackPanel Spacing="8" IsVisible="{Binding Ai.IsApiKeyRelevant}" IsEnabled="{Binding Ai.IsEnabled}">
                 <DockPanel>
                     <Button DockPanel.Dock="Right" Content="Clear" Margin="8,0,0,0"
-                            Command="{Binding ClearApiKeyCommand}" />
+                            Command="{Binding Ai.ClearApiKeyCommand}" />
                     <Button DockPanel.Dock="Right" Content="Save" Margin="8,0,0,0"
-                            Command="{Binding SaveApiKeyCommand}" />
-                    <TextBox Text="{Binding ApiKey}"
+                            Command="{Binding Ai.SaveApiKeyCommand}" />
+                    <TextBox Text="{Binding Ai.ApiKey}"
                              PlaceholderText="Enter an API key to store it"
                              PasswordChar="•" />
                 </DockPanel>
-                <TextBlock Text="{Binding KeyStatus}"
+                <TextBlock Text="{Binding Ai.KeyStatus}"
                            Foreground="Gray"
                            TextWrapping="Wrap" />
             </StackPanel>
 
             <Button Content="Use local Ollama"
-                    Command="{Binding UseOllamaPresetCommand}"
-                    IsEnabled="{Binding IsEnabled}"
+                    Command="{Binding Ai.UseOllamaPresetCommand}"
+                    IsEnabled="{Binding Ai.IsEnabled}"
                     HorizontalAlignment="Left" />
         </StackPanel>
 

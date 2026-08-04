@@ -21,10 +21,23 @@ public partial class RunWindow : Window
 
     public RunWindow(RunViewModel? viewModel, ISettingsWindowService? settingsWindowService)
     {
-        DataContext = viewModel;
         _settingsWindowService = settingsWindowService;
 
+        // The order of these three steps is load-bearing. Each palette view binds against its own
+        // view model, so it must never see this window's: building the tree while DataContext is
+        // still null leaves the child bindings idle, giving each view its own context blocks
+        // inheritance for good, and only then is the window's context safe to set. Binding the
+        // children's DataContext in XAML instead loses this race — the inherited value arrives
+        // first, and every binding inside the views fails to cast it.
         InitializeComponent();
+
+        if (viewModel is not null)
+        {
+            BranchView.DataContext = viewModel.Branches;
+            CommitView.DataContext = viewModel.Commit;
+        }
+
+        DataContext = viewModel;
 
         Activated += OnActivated;
         Deactivated += OnDeactivated;
