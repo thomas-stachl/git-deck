@@ -18,6 +18,17 @@
         Background="Transparent">
 
     <Window.Styles>
+        <!-- The search/message boxes sit next to the brand icon in a shared row; Fluent's TextBox
+             template swaps PART_BorderElement's border/background to an accent-colored ring on
+             focus, which rings just the field and leaves the icon looking detached. The window
+             itself is the whole focused surface here, so the focused state is flattened back to
+             matching the unfocused one. -->
+        <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+
         <Style Selector="ListBoxItem">
             <Setter Property="Padding" Value="10,8" />
             <Setter Property="CornerRadius" Value="6" />
@@ -55,16 +66,25 @@
                  the shell after the inner panel switches DataContext to the child view model. -->
             <StackPanel IsVisible="{Binding IsBranchMode}">
                 <StackPanel DataContext="{Binding Branches}">
-                    <TextBox Name="BranchSearchBox"
-                             Text="{Binding SearchText}"
-                             PlaceholderText="Search or create a branch..."
-                             IsEnabled="{Binding !IsBusy}"
-                             BorderThickness="0"
-                             Background="Transparent"
-                             FontSize="24"
-                             Padding="18,16"
-                             CaretBrush="White"
-                             Foreground="White" />
+                    <Grid ColumnDefinitions="Auto,*">
+                        <Image Grid.Column="0"
+                               Source="/Assets/gitdeck-icon.png"
+                               Width="28"
+                               Height="28"
+                               Margin="18,0,0,0"
+                               VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1"
+                                 Name="BranchSearchBox"
+                                 Text="{Binding SearchText}"
+                                 PlaceholderText="Search or create a branch..."
+                                 IsEnabled="{Binding !IsBusy}"
+                                 BorderThickness="0"
+                                 Background="Transparent"
+                                 FontSize="24"
+                                 Padding="14,16,18,16"
+                                 CaretBrush="White"
+                                 Foreground="White" />
+                    </Grid>
 
                     <Border Height="1"
                             Margin="12,0"
@@ -111,23 +131,33 @@
             <!-- Commit mode: tick files, then Enter turns the header into the message box. -->
             <StackPanel IsVisible="{Binding IsCommitMode}">
                 <StackPanel DataContext="{Binding Commit}">
-                    <TextBlock Text="{Binding SelectionSummary}"
-                               IsVisible="{Binding IsFilesPhase}"
-                               Foreground="White"
-                               FontSize="24"
-                               Padding="18,16" />
+                    <Grid ColumnDefinitions="Auto,*">
+                        <Image Grid.Column="0"
+                               Source="/Assets/gitdeck-icon.png"
+                               Width="28"
+                               Height="28"
+                               Margin="18,0,0,0"
+                               VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding SelectionSummary}"
+                                   IsVisible="{Binding IsFilesPhase}"
+                                   Foreground="White"
+                                   FontSize="24"
+                                   Padding="14,16,18,16" />
 
-                    <TextBox Name="CommitMessageBox"
-                             Text="{Binding Message}"
-                             IsVisible="{Binding IsMessagePhase}"
-                             PlaceholderText="Commit message..."
-                             IsEnabled="{Binding !IsBusy}"
-                             BorderThickness="0"
-                             Background="Transparent"
-                             FontSize="24"
-                             Padding="18,16"
-                             CaretBrush="White"
-                             Foreground="White" />
+                        <TextBox Grid.Column="1"
+                                 Name="CommitMessageBox"
+                                 Text="{Binding Message}"
+                                 IsVisible="{Binding IsMessagePhase}"
+                                 PlaceholderText="Commit message..."
+                                 IsEnabled="{Binding !IsBusy}"
+                                 BorderThickness="0"
+                                 Background="Transparent"
+                                 FontSize="24"
+                                 Padding="14,16,18,16"
+                                 CaretBrush="White"
+                                 Foreground="White" />
+                    </Grid>
 
                     <Border Height="1"
                             Margin="12,0"
