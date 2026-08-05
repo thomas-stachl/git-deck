@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>GitDeck</title>
+    <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+  </head>
+  <body>
+    <!--
+      Shared by all three actions (Repo Status, Fetch, Quick Commit) — their manifest entries all
+      point at this one file, since the picker/recent-repo UI is identical regardless of which
+      action opened it.
+
+      datasource="getRecentRepositories" + hot-reload: the component itself sends
+      {event: "getRecentRepositories"} to the plugin and expects a response echoing that event name
+      with an `items: {label, value}[]` array — see plugin.ts's onSendToPlugin handler.
+    -->
+    <sdpi-item label="Repository">
+      <sdpi-select
+        setting="repositoryPath"
+        datasource="getRecentRepositories"
+        loading="Loading recent repositories…"
+        placeholder="Choose a repository…"
+        hot-reload
+      ></sdpi-select>
+    </sdpi-item>
+    <sdpi-item>
+      <button id="browse" type="button">Browse…</button>
+    </sdpi-item>
+
+    <script>
+      const client = SDPIComponents.streamDeckClient;
+
+      document.getElementById("browse").addEventListener("click", () => {
+        client.send("sendToPlugin", { event: "pickFolder" });
+      });
+
+      client.sendToPropertyInspector.subscribe((payload) => {
+        if (payload && payload.event === "pickedFolder" && payload.path) {
+          client.setSettings({ repositoryPath: payload.path });
+        }
+      });
+    </script>
+  </body>
+</html>

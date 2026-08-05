@@ -1,0 +1,5 @@
+node_modules/
+com.gitdeck.plugin.sdPlugin/bin/
+dist/
+.verify-tmp/
+*.streamDeckPlugin

@@ -1,0 +1,14 @@
+{
+  "extends": "@tsconfig/node20/tsconfig.json",
+  "compilerOptions": {
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "noImplicitOverride": true,
+    "customConditions": ["node"],
+    "outDir": "com.gitdeck.plugin.sdPlugin/bin",
+    "rootDir": "src",
+    "declaration": false,
+    "strict": true
+  },
+  "include": ["src/**/*.ts"]
+}

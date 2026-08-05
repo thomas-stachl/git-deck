@@ -1,0 +1,168 @@
+import {
+  action,
+  type DidReceiveSettingsEvent,
+  type KeyAction,
+  type KeyDownEvent,
+  SingletonAction,
+  type WillAppearEvent,
+  type WillDisappearEvent,
+} from "@elgato/streamdeck";
+import { gitDeckIpc } from "../ipc/sharedClient";
+import type { RepositoryOverview } from "../ipc/gitDeckIpc.types";
+import type { GitDeckKeySettings } from "./settings";
+
+/** Minutes, not constant polling — same "quiet background fetch" philosophy the design doc names. */
+const REFRESH_INTERVAL_MS = 2 * 60 * 1000;
+
+type BadgeState = "upToDate" | "behind" | "noUpstream" | "error" | "disconnected" | "none";
+
+const BADGE_COLOR: Record<BadgeState, string> = {
+  upToDate: "#16a34a",
+  behind: "#2563eb",
+  noUpstream: "#6b7280",
+  error: "#d97706",
+  disconnected: "#dc2626",
+  none: "#374151",
+};
+
+/**
+ * Press pulls if behind, else opens the Branches palette scoped to this key's repo; the face shows
+ * live ahead/behind. Reuses IBranchService's own ahead/behind semantics via GetStatusAsync — no
+ * duplicated git logic here, same principle the .NET side follows.
+ */
+@action({ UUID: "com.gitdeck.plugin.repo-status" })
+export class RepoStatus extends SingletonAction<GitDeckKeySettings> {
+  private readonly refreshTimers = new Map<string, NodeJS.Timeout>();
+
+  override onWillAppear(ev: WillAppearEvent<GitDeckKeySettings>): void {
+    // The manifest only declares Controllers: ["Keypad"] for these actions, so ev.action is always
+    // a KeyAction at runtime — but SingletonAction's events type it as DialAction | KeyAction
+    // since the base class covers both controller kinds. Narrow explicitly rather than casting.
+    if (!ev.action.isKey()) {
+      return;
+    }
+
+    const repositoryPath = ev.payload.settings.repositoryPath;
+    const action = ev.action;
+
+    void this.refreshFace(action, repositoryPath);
+
+    this.refreshTimers.set(
+      action.id,
+      setInterval(() => void this.refreshFace(action, repositoryPath), REFRESH_INTERVAL_MS),
+    );
+  }
+
+  override onWillDisappear(ev: WillDisappearEvent<GitDeckKeySettings>): void {
+    const timer = this.refreshTimers.get(ev.action.id);
+
+    if (timer) {
+      clearInterval(timer);
+      this.refreshTimers.delete(ev.action.id);
+    }
+  }
+
+  override async onKeyDown(ev: KeyDownEvent<GitDeckKeySettings>): Promise<void> {
+    const repositoryPath = ev.payload.settings.repositoryPath;
+
+    if (!repositoryPath) {
+      await ev.action.showAlert();
+      return;
+    }
+
+    try {
+      const overview = await gitDeckIpc.getStatus(repositoryPath);
+
+      if (overview.HasUpstream && overview.BehindBy > 0) {
+        await gitDeckIpc.pull(repositoryPath);
+      } else {
+        await gitDeckIpc.openBranches(repositoryPath);
+      }
+    } catch {
+      await ev.action.showAlert();
+    }
+
+    await this.refreshFace(ev.action, repositoryPath);
+  }
+
+  override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<GitDeckKeySettings>): Promise<void> {
+    if (!ev.action.isKey()) {
+      return;
+    }
+
+    await this.refreshFace(ev.action, ev.payload.settings.repositoryPath);
+  }
+
+  private async refreshFace(action: KeyAction<GitDeckKeySettings>, repositoryPath?: string): Promise<void> {
+    if (!repositoryPath) {
+      await action.setTitle("No repo");
+      await action.setImage(backgroundSvg("none"));
+      return;
+    }
+
+    if (!gitDeckIpc.isConnected) {
+      // Distinct "disconnected" face + auto-retry: GitDeckIpcClient reconnects itself on a backoff,
+      // and onDidReceiveSettings / the next refresh tick will pick the real status back up once it
+      // does — nothing else to trigger here.
+      await action.setTitle("GitDeck.App\nnot running");
+      await action.setImage(backgroundSvg("disconnected"));
+      return;
+    }
+
+    try {
+      const overview = await gitDeckIpc.getStatus(repositoryPath);
+
+      if (!overview.IsRepository) {
+        await action.setTitle(overview.LoadError ? "Load error" : "Not a repo");
+        await action.setImage(backgroundSvg(overview.LoadError ? "error" : "none"));
+        return;
+      }
+
+      await action.setTitle(describeStatus(overview));
+      await action.setImage(backgroundSvg(badgeStateFor(overview)));
+    } catch {
+      await action.setTitle("Error");
+      await action.setImage(backgroundSvg("error"));
+    }
+  }
+}
+
+function badgeStateFor(overview: RepositoryOverview): BadgeState {
+  if (!overview.HasUpstream) {
+    return "noUpstream";
+  }
+
+  return overview.BehindBy > 0 ? "behind" : "upToDate";
+}
+
+/**
+ * "main / ↓3 ↑1" for diverged history, "main / up to date" once neither, or just the branch name
+ * when there's no upstream to compare against — mirrors RunViewModel.DescribeUpstream's wording.
+ */
+function describeStatus(overview: RepositoryOverview): string {
+  const branch = overview.Head ?? "?";
+
+  if (!overview.HasUpstream) {
+    return branch;
+  }
+
+  if (overview.BehindBy === 0 && overview.AheadBy === 0) {
+    return `${branch}\nup to date`;
+  }
+
+  const parts: string[] = [];
+  if (overview.BehindBy > 0) parts.push(`↓${overview.BehindBy}`);
+  if (overview.AheadBy > 0) parts.push(`↑${overview.AheadBy}`);
+
+  return `${branch}\n${parts.join(" ")}`;
+}
+
+/**
+ * The key's full background, color-coded per state; setTitle renders the branch name as text on
+ * top of it. Generated inline rather than shipped as pre-rendered PNGs per state — setImage
+ * accepts a raw SVG string directly.
+ */
+function backgroundSvg(state: BadgeState): string {
+  const color = BADGE_COLOR[state];
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144"><rect width="144" height="144" rx="18" fill="${color}"/></svg>`;
+}

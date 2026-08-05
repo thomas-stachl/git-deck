@@ -189,43 +189,58 @@ already live — Phase 1 is implemented and tested; the Node-side client is Phas
 
 Rough phases; each is independently shippable/testable before moving to the next.
 
-### Phase 1 — IPC plumbing, no Stream Deck yet
-- [ ] Define `IGitDeckIpc` and its pipe-name constant in `GitDeck.Ipc`.
-- [ ] Implement the server side in `GitDeck.App` (`NamedPipeServerStream` accept-loop as a
-      hosted singleton, wired into `Program.cs`'s existing `ServiceCollection`).
-- [ ] Implement `IGitDeckIpc` by composing `IBranchService` + `IRunWindowService` +
-      `IFilePickerService`.
-- [ ] Write a throwaway console client (or a test) that connects and calls `GetStatusAsync`
-      against a real repo, to prove the pipe round-trips before any plugin code exists.
+### Phase 1 — IPC plumbing, no Stream Deck yet — done
+- [x] Define `IGitDeckIpc` and its pipe-name constant in `GitDeck.Ipc`.
+- [x] Implement the server side in `GitDeck.App` (`GitDeckIpcServer`: a self-starting singleton +
+      `IDisposable`, the same shape `WindowsGlobalHotkeyService` uses — there's no generic `Host`/
+      `IHostedService` in this app to hook into instead).
+- [x] Implement `IGitDeckIpc` by composing `IBranchService` + `IRunWindowService` +
+      `IFilePickerService` (+ `ISettingsService`, for the MRU).
+- [x] `GitDeck.Tests/GitDeckIpcTests.cs` — real pipe, real `BranchService`, real scratch repo.
 
-### Phase 2 — app-side repo override
-- [ ] Add `repositoryPathOverride` to `IRunWindowService.Toggle` / `RunWindowService` /
-      `RunViewModel.OpenAsync`, falling back to `Settings.RepositoryPath` when null.
-- [ ] Add `RecentRepositoryPaths` (MRU) to `AppSettings` + `SettingsService`, append-on-use.
-- [ ] Wire `OpenBranchesAsync` / `OpenCommitAsync` / `GetRecentRepositoriesAsync` /
-      `PickRepositoryFolderAsync` on `IGitDeckIpc` through to these.
+### Phase 2 — app-side repo override — done
+- [x] `repositoryPathOverride` threaded through `Toggle` → `ShowNearTop` → `RunViewModel.OpenAsync`
+      **and** into `BranchPaletteViewModel`'s three direct settings reads (a gap the original plan
+      here missed — `RunViewModel` alone wasn't enough).
+- [x] `RecentRepositoryPaths` (MRU) on `AppSettings` + `AppSettingsExtensions`, appended-to on any
+      successful path resolution (a pick, or a status read that finds a real repo).
+- [x] `GetRecentRepositoriesAsync` / `PickRepositoryFolderAsync` wired on `GitDeckIpc`. Also fixed,
+      not originally planned: `FilePickerService` silently returned `null` with no window ever
+      shown (cold start) — `OwnerWindow` keeps `desktop.Windows` non-empty for the app's lifetime.
 
-### Phase 3 — the plugin process
-- [ ] Scaffold the plugin project (language per the open question above) with a manifest
-      defining the three actions (Repo Status, Fetch, Quick Commit) and shared Property
-      Inspector.
-- [ ] Implement the Stream Deck WebSocket handshake (`registerEvent`, `willAppear`,
-      `keyDown`, `didReceiveSettings`, `sendToPlugin`/`sendToPropertyInspector`).
-- [ ] Wire the plugin as a StreamJsonRpc client to GitDeck.App's named pipe, with reconnect/
-      backoff for "GitDeck.App not running yet."
-- [ ] Build the Property Inspector page: recent-repo dropdown + "Browse…" flow per the
-      sequence diagram above.
+### Phase 3 — the plugin process — scaffolded and IPC-verified, live behavior not yet checked
+Built against Elgato's public `@elgato/streamdeck` SDK (2.1.0) + `vscode-jsonrpc` (9.0.1), in
+`streamdeck-plugin/`. Every API used below (SingletonAction, the `@action` decorator, event/payload
+shapes, `vscode-jsonrpc`'s `SocketMessageReader`/`Writer` and `sendRequest` param-wrapping
+behavior) was confirmed against the actual installed packages' type declarations and source, not
+assumed from general knowledge.
+- [x] Scaffolded by hand from the real `@elgato/cli` template (package.json, tsconfig, rollup
+      config) plus `manifest.json` defining the three actions sharing one Property Inspector.
+- [x] `gitDeckIpcClient.ts`: connects over the named pipe via `vscode-jsonrpc`'s
+      `SocketMessageReader`/`SocketMessageWriter` + `createMessageConnection`, with reconnect on a
+      capped backoff. **Verified against a real `GitDeckIpcServer`** — the actual compiled
+      production module, not a spike stand-in — round-tripped `GetStatusAsync` successfully.
+      (No hand-rolled WebSocket handshake needed: the SDK's `SingletonAction` class abstracts
+      `willAppear`/`keyDown`/`didReceiveSettings`/`sendToPlugin` into method overrides.)
+- [x] Property Inspector (`ui/repository-picker.html`): `sdpi-select` with a `datasource`/
+      `hot-reload` binding for the recent-repo dropdown, a "Browse…" button round-tripping through
+      `pickFolder`/`pickedFolder` messages.
+- [ ] **Not yet done — needs your machine**: assigning keys on a real Stream Deck app, confirming
+      the PI's dropdown/Browse flow actually behaves as the datasource/hot-reload wiring intends,
+      confirming reconnect when `GitDeck.App` is killed mid-session.
 
-### Phase 4 — key face rendering
-- [ ] Render title (repo/branch) + badge image per the state table above from
-      `RepositoryOverview`.
-- [ ] Background refresh timer per key instance + refresh on `willAppear` and post-action.
-- [ ] "Disconnected" face + reconnect handling when the pipe isn't available.
+### Phase 4 — key face rendering — implemented as part of Phase 3, not separately, not yet seen live
+- [x] `repoStatus.ts` renders title (branch + ↓/↑ counts, mirroring `RunViewModel`'s wording) and a
+      color-coded background (generated SVG, not pre-rendered PNGs) per state — up to date / behind
+      / no upstream / error / disconnected.
+- [x] Refresh timer (2 min) per key instance, cleared on `onWillDisappear`; refresh on
+      `willAppear`, `onDidReceiveSettings`, and immediately after a key press.
+- [ ] Visual confirmation on a real key — not doable from this environment.
 
-### Phase 5 — polish / packaging
-- [ ] Package/sign the plugin per Stream Deck's distribution requirements.
+### Phase 5 — polish / packaging — not started
+- [ ] Package/sign the plugin (`streamdeck pack`) per Stream Deck's distribution requirements.
 - [ ] Decide whether the plugin should offer to launch `GitDeck.App.exe` if it isn't running
-      (nice-to-have, not required for v1).
+      (nice-to-have, not required for v1; no existing mechanism to locate its install path).
 - [ ] End-to-end test: fresh machine, install plugin, assign a key to a repo with no prior
       GitDeck configuration, confirm the picker/MRU flow works without ever opening Settings
-      first.
+      first — this is exactly the scenario Phase 2's `OwnerWindow` fix exists to make true.

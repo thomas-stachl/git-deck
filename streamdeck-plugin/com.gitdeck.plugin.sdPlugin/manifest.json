@@ -1,0 +1,65 @@
+{
+  "Name": "GitDeck",
+  "Author": "GitDeck",
+  "Description": "Repo status, fetch, and quick commit for a git repository, from a Stream Deck key.",
+  "UUID": "com.gitdeck.plugin",
+  "Version": "0.1.0.0",
+  "Icon": "imgs/plugin-icon",
+  "Category": "GitDeck",
+  "CategoryIcon": "imgs/plugin-icon",
+  "CodePath": "bin/plugin.js",
+  "SDKVersion": 3,
+  "Software": {
+    "MinimumVersion": "6.9"
+  },
+  "OS": [
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    }
+  ],
+  "Nodejs": {
+    "Version": "20",
+    "Debug": "enabled"
+  },
+  "Actions": [
+    {
+      "Name": "Repo Status",
+      "UUID": "com.gitdeck.plugin.repo-status",
+      "Icon": "imgs/actions/repo-status/icon",
+      "PropertyInspectorPath": "ui/repository-picker.html",
+      "Controllers": ["Keypad"],
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/actions/repo-status/key",
+          "TitleAlignment": "middle"
+        }
+      ]
+    },
+    {
+      "Name": "Fetch",
+      "UUID": "com.gitdeck.plugin.fetch",
+      "Icon": "imgs/actions/fetch/icon",
+      "PropertyInspectorPath": "ui/repository-picker.html",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/fetch/key"
+        }
+      ]
+    },
+    {
+      "Name": "Quick Commit",
+      "UUID": "com.gitdeck.plugin.quick-commit",
+      "Icon": "imgs/actions/quick-commit/icon",
+      "PropertyInspectorPath": "ui/repository-picker.html",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/quick-commit/key"
+        }
+      ]
+    }
+  ]
+}
