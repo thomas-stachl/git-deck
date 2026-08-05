@@ -14,6 +14,7 @@
     <ProjectReference Include="..\GitDeck.Core\GitDeck.Core.csproj" />
     <ProjectReference Include="..\GitDeck.Git\GitDeck.Git.csproj" />
     <ProjectReference Include="..\GitDeck.App\GitDeck.App.csproj" />
+    <ProjectReference Include="..\GitDeck.Ipc\GitDeck.Ipc.csproj" />
   </ItemGroup>
 
 </Project>

@@ -2,12 +2,14 @@
 using GitDeck.App.Logging;
 using GitDeck.App.Services;
 using GitDeck.App.ViewModels;
+using GitDeck.App.Views;
 using GitDeck.App.Views.Run;
 using GitDeck.App.Views.Settings;
 using GitDeck.Core.Settings;
 using GitDeck.Git;
 using GitDeck.Git.Generation;
 using GitDeck.Git.Repositories;
+using GitDeck.Ipc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System;
@@ -84,6 +86,7 @@ sealed class Program
 
         services.AddSingleton<RunViewModel>();
         services.AddSingleton<RunWindow>();
+        services.AddSingleton<OwnerWindow>();
         services.AddSingleton<IRunWindowService, RunWindowService>();
         services.AddSingleton<ISettingsWindowService, SettingsWindowService>();
 
@@ -98,6 +101,8 @@ sealed class Program
         services.AddSingleton<IDiffService, DiffService>();
         services.AddSingleton<ICommitMessageGenerator, CommitMessageGenerator>();
         services.AddSingleton<ICommitMessageService, CommitMessageService>();
+        services.AddSingleton<IGitDeckIpc, GitDeckIpc>();
+        services.AddSingleton<GitDeckIpcServer>();
 
         // DPAPI is Windows-only; elsewhere nothing is stored and the API key comes from the
         // environment instead of being written to disk in the clear.

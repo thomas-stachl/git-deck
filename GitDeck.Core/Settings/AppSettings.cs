@@ -40,4 +40,23 @@ public class AppSettings
     /// (the equivalent of <c>git push --set-upstream</c> after <c>git switch -c</c>).
     /// </summary>
     public bool PublishNewBranchesToRemote { get; set; }
+
+    private List<string> _recentRepositoryPaths = [];
+
+    /// <summary>
+    /// Repository paths used before, newest first, capped at <see cref="MaxRecentRepositoryPaths"/>.
+    /// Backs the Stream Deck Property Inspector's repo dropdown.
+    /// </summary>
+    /// <remarks>
+    /// The setter tolerates null for the same reason <see cref="Ai"/>'s does: the deserializer is not
+    /// bound by the nullability annotation, so a hand-edited <c>"RecentRepositoryPaths": null</c> in
+    /// settings.json would otherwise put a null behind every consumer that expects a list.
+    /// </remarks>
+    public List<string> RecentRepositoryPaths
+    {
+        get => _recentRepositoryPaths;
+        set => _recentRepositoryPaths = value ?? [];
+    }
+
+    public const int MaxRecentRepositoryPaths = 10;
 }

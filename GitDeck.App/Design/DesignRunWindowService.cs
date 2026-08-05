@@ -5,7 +5,7 @@ namespace GitDeck.App.Design;
 
 internal sealed class DesignRunWindowService : IRunWindowService
 {
-    public void Toggle(RunMode mode)
+    public void Toggle(RunMode mode, string? repositoryPathOverride = null)
     {
     }
 }

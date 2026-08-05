@@ -4,4 +4,8 @@
     <PackageReference Include="StreamJsonRpc" Version="2.25.29" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\GitDeck.Git\GitDeck.Git.csproj" />
+  </ItemGroup>
+
 </Project>

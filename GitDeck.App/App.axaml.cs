@@ -4,6 +4,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using GitDeck.App.Services;
 using GitDeck.App.ViewModels;
+using GitDeck.App.Views;
 using GitDeck.App.Views.Run;
 using GitDeck.App.Views.Settings;
 using GitDeck.Core.Settings;
@@ -17,6 +18,7 @@ public partial class App : Application
     private readonly IServiceProvider? _services;
     private SettingsWindow? _settingsWindow;
     private RunWindow? _runWindow;
+    private OwnerWindow? _ownerWindow;
     private bool _isExitRequested;
 
     // Parameterless constructor required by the Avalonia XAML previewer/designer.
@@ -52,6 +54,18 @@ public partial class App : Application
             // leave the next Show() throwing on a closed window.
             _runWindow = _services.GetRequiredService<RunWindow>();
             _runWindow.Closing += OnRunWindowClosing;
+
+            // Shown once, never hidden or closed: keeps desktop.Windows non-empty for the app's
+            // whole lifetime, so FilePickerService always has a TopLevel to own its dialogs — even
+            // on a cold start, before the user has ever opened Settings or the palette. Without
+            // this, an IPC-triggered PickRepositoryFolderAsync would silently return null.
+            _ownerWindow = _services.GetRequiredService<OwnerWindow>();
+            _ownerWindow.Show();
+
+            // Resolving this pulls in IRunWindowService -> RunWindowService -> RunWindow, an
+            // Avalonia Window whose InitializeComponent needs the framework already initialized —
+            // exactly why it has to happen here and not in Program.Main.
+            _services.GetRequiredService<GitDeckIpcServer>();
         }
 
         base.OnFrameworkInitializationCompleted();
@@ -117,6 +131,7 @@ public partial class App : Application
 
         _runWindow?.Close();
         _settingsWindow?.Close();
+        _ownerWindow?.Close();
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {

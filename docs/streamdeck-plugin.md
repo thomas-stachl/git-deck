@@ -156,14 +156,34 @@ A small family, not one mega-action — each with the same repo-picker Property 
 - **Quick Commit** — opens the Commit palette scoped to that repo (reuses existing AI commit
   message generation).
 
-## Open question: plugin implementation language
+## Plugin implementation language — resolved: Elgato's internal Node/TypeScript SDK
 
-`GitDeck.Ipc` is StreamJsonRpc, which is .NET-only. Default recommendation: write the plugin
-itself as a small .NET console app referencing `GitDeck.Ipc` directly, hand-rolling the thin
-Stream Deck WebSocket protocol (connect, `registerEvent`, JSON events) rather than pulling in
-Elgato's Node/TypeScript SDK — avoids a two-language split for one integration. This is the one
-piece of the design that should defer to whatever internal Stream Deck plugin conventions/
-templates already exist at Elgato, if any, over this default.
+`GitDeck.Ipc` is StreamJsonRpc, which is .NET-only, so this doc originally defaulted to a small
+.NET console app hand-rolling the Stream Deck WebSocket protocol, to avoid a two-language split —
+while flagging that this should defer to whatever internal Stream Deck plugin conventions/
+templates exist at Elgato. Decision: use Elgato's internal Node/TypeScript SDK. That means the
+plugin process is Node, not .NET, and has to reach `GitDeck.App`'s named pipe without a shared
+StreamJsonRpc client.
+
+A throwaway interop spike (a .NET console app serving `IGitDeckIpc` over a test named pipe, called
+by a Node script using nothing but the built-in `net` module) confirmed this is entirely workable
+and pinned down the exact wire contract a Node client has to match:
+
+- **Framing**: `HeaderDelimitedMessageHandler` sends `Content-Length: <n>\r\n\r\n<json>` — the same
+  framing the Language Server Protocol uses. The `vscode-jsonrpc` npm package implements this
+  exact framing, so a real plugin likely wants that instead of hand-rolling it as the spike did.
+- **Casing**: `SystemTextJsonFormatter` serializes properties in **PascalCase**, matching the C#
+  names exactly (confirmed: a `GetStatusAsync` response came back as `{"IsRepository":true,
+  "WorkingDirectory":"...", "HasUpstream":true, "AheadBy":1, "BehindBy":3, ...}` — not camelCase).
+  The Node client's types must read `overview.IsRepository`, not `overview.isRepository`.
+- **Method names**: called literally as the C# interface member name, `Async` suffix included
+  (`"method":"GetStatusAsync"`) — StreamJsonRpc does not strip it by convention.
+- **Parameters**: positional array params work (`"params":["C:\\repos\\demo"]`) and bind correctly
+  against `GetStatusAsync(string repositoryPath, CancellationToken ct = default)`, with the
+  trailing `CancellationToken` simply omitted from the array rather than needing a placeholder.
+
+See the implementation plan below for where `GitDeck.Ipc`, `GitDeckIpc`, and `GitDeckIpcServer`
+already live — Phase 1 is implemented and tested; the Node-side client is Phase 3.
 
 ## Implementation plan
 
