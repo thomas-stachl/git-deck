@@ -46,6 +46,9 @@ public sealed class GitDeckIpc(
     public Task<PullResult> PullAsync(string repositoryPath, CancellationToken cancellationToken = default)
         => branchService.PullCurrentBranchAsync(repositoryPath, cancellationToken);
 
+    public Task<PushResult> PushAsync(string repositoryPath, CancellationToken cancellationToken = default)
+        => branchService.PushCurrentBranchAsync(repositoryPath, cancellationToken);
+
     public Task OpenBranchesAsync(string repositoryPath, CancellationToken cancellationToken = default)
     {
         // Fire-and-forget the palette open, same as the hotkey path: RunWindow.ShowNearTop already

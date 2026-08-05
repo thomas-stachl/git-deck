@@ -141,6 +141,29 @@ public sealed class BranchService(
             : PullResult.Failed(pull.FailureMessage ?? "Could not pull the latest changes.");
     }
 
+    public async Task<PushResult> PushCurrentBranchAsync(string? repositoryPath, CancellationToken cancellationToken = default)
+    {
+        var preflight = await Task.Run(() => PreparePush(repositoryPath), cancellationToken).ConfigureAwait(false);
+
+        if (preflight.Error is not null)
+        {
+            return PushResult.Failed(preflight.Error);
+        }
+
+        string[] arguments = preflight.NeedsPublish
+            ? ["push", "--set-upstream", preflight.RemoteName!, preflight.BranchName!]
+            : ["push"];
+
+        var push = await gitExecutableService.RunAsync(
+            preflight.WorkingDirectory,
+            arguments,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        return push.IsSuccess
+            ? new PushResult(true, preflight.NeedsPublish, null)
+            : PushResult.Failed(push.FailureMessage ?? "Could not push the current branch.");
+    }
+
     private sealed record WorkingDirectoryPreflight(string? Error, string? WorkingDirectory = null);
 
     private static WorkingDirectoryPreflight PrepareWorkingDirectory(string? repositoryPath, string noWorkingTreeMessage)
@@ -208,6 +231,61 @@ public sealed class BranchService(
         catch (Exception ex) when (ex is LibGit2SharpException or IOException or UnauthorizedAccessException or ArgumentException)
         {
             return new SwitchPreflight(ex.Message);
+        }
+    }
+
+    private sealed record PushPreflight(
+        string? Error,
+        string? WorkingDirectory = null,
+        string? BranchName = null,
+        string? RemoteName = null,
+        bool NeedsPublish = false);
+
+    private static PushPreflight PreparePush(string? repositoryPath)
+    {
+        var gitDirectory = TryDiscover(repositoryPath);
+        if (gitDirectory is null)
+        {
+            return new PushPreflight("No repository found. Check the repository path in Settings.");
+        }
+
+        try
+        {
+            using var repository = new Repository(gitDirectory);
+
+            if (repository.Info.IsBare)
+            {
+                return new PushPreflight("Cannot push from a bare repository.");
+            }
+
+            if (repository.Info.IsHeadUnborn)
+            {
+                return new PushPreflight("The repository has no commits yet, so there is nothing to push.");
+            }
+
+            if (repository.Info.IsHeadDetached)
+            {
+                return new PushPreflight("Cannot push a detached HEAD. Switch to a branch first.");
+            }
+
+            var head = repository.Head;
+            var workingDirectory = repository.Info.WorkingDirectory;
+
+            if (head.IsTracking)
+            {
+                return new PushPreflight(null, workingDirectory, head.FriendlyName);
+            }
+
+            // No upstream yet: publish to whichever remote CreateBranchAsync would have used.
+            var remoteName = PreferredRemoteName(repository);
+
+            return remoteName is null
+                ? new PushPreflight("This repository has no remote to push to.")
+                : new PushPreflight(null, workingDirectory, head.FriendlyName, remoteName, NeedsPublish: true);
+        }
+        catch (Exception ex) when (ex is LibGit2SharpException or IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return new PushPreflight(ex.Message);
         }
     }
 

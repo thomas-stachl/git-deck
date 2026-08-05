@@ -1,5 +1,6 @@
 import streamDeck from "@elgato/streamdeck";
 import { FetchAction } from "./actions/fetchAction";
+import { PushAction } from "./actions/pushAction";
 import { QuickCommit } from "./actions/quickCommit";
 import { RepoStatus } from "./actions/repoStatus";
 import { gitDeckIpc } from "./ipc/sharedClient";
@@ -55,6 +56,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 streamDeck.actions.registerAction(new RepoStatus());
 streamDeck.actions.registerAction(new FetchAction());
+streamDeck.actions.registerAction(new PushAction());
 streamDeck.actions.registerAction(new QuickCommit());
 
 // Connects to GitDeck.App over the named pipe; reconnects itself forever after this, independent

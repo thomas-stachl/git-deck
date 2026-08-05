@@ -20,6 +20,9 @@ public interface IGitDeckIpc
     /// <summary>Fast-forwards the current branch from its upstream.</summary>
     Task<PullResult> PullAsync(string repositoryPath, CancellationToken cancellationToken = default);
 
+    /// <summary>Pushes the current branch to its remote, publishing it first if it has none yet.</summary>
+    Task<PushResult> PushAsync(string repositoryPath, CancellationToken cancellationToken = default);
+
     /// <summary>Opens (or focuses) the Branches palette, scoped to <paramref name="repositoryPath"/>.</summary>
     Task OpenBranchesAsync(string repositoryPath, CancellationToken cancellationToken = default);
 

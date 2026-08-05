@@ -50,6 +50,18 @@
       ]
     },
     {
+      "Name": "Push",
+      "UUID": "com.gitdeck.plugin.push",
+      "Icon": "imgs/actions/push/icon",
+      "PropertyInspectorPath": "ui/repository-picker.html",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/actions/push/key"
+        }
+      ]
+    },
+    {
       "Name": "Quick Commit",
       "UUID": "com.gitdeck.plugin.quick-commit",
       "Icon": "imgs/actions/quick-commit/icon",

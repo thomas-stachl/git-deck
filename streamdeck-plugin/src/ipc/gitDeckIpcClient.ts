@@ -5,7 +5,7 @@ import {
   SocketMessageWriter,
   type MessageConnection,
 } from "vscode-jsonrpc/node";
-import type { FetchResult, PullResult, RepositoryOverview } from "./gitDeckIpc.types";
+import type { FetchResult, PullResult, PushResult, RepositoryOverview } from "./gitDeckIpc.types";
 
 // Must match GitDeck.Ipc/GitDeckIpcConstants.cs's PipeName exactly — no shared codegen across the
 // language boundary, so if that constant ever changes, this has to change by hand too.
@@ -146,6 +146,10 @@ export class GitDeckIpcClient {
 
   pull(repositoryPath: string): Promise<PullResult> {
     return this.requireConnection().sendRequest<PullResult>("PullAsync", repositoryPath);
+  }
+
+  push(repositoryPath: string): Promise<PushResult> {
+    return this.requireConnection().sendRequest<PushResult>("PushAsync", repositoryPath);
   }
 
   openBranches(repositoryPath: string): Promise<void> {

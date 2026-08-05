@@ -39,4 +39,14 @@ public interface IBranchService
     /// git client, not something a quick-launch palette should attempt on its own.
     /// </summary>
     Task<PullResult> PullCurrentBranchAsync(string? repositoryPath, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Pushes the current branch to its remote — <c>git push</c>, or
+    /// <c>git push --set-upstream &lt;remote&gt; &lt;branch&gt;</c> the first time a branch has no
+    /// upstream configured yet, so a push button works whether or not the branch has been published
+    /// before (the same auto-publish idea <see cref="CreateBranchAsync"/> already offers). A
+    /// non-fast-forward rejection is git's own safety net here — unlike <see cref="PullCurrentBranchAsync"/>,
+    /// there is no merge/rebase judgment call to avoid, so this does not need its own ff-only guard.
+    /// </summary>
+    Task<PushResult> PushCurrentBranchAsync(string? repositoryPath, CancellationToken cancellationToken = default);
 }

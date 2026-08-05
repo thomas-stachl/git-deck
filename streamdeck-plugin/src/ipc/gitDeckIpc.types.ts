@@ -54,3 +54,10 @@ export interface PullResult {
   IsPulled: boolean;
   ErrorMessage: string | null;
 }
+
+/** Mirrors GitDeck.Git/Repositories/BranchOperations.cs's PushResult record. */
+export interface PushResult {
+  IsPushed: boolean;
+  DidPublish: boolean;
+  ErrorMessage: string | null;
+}

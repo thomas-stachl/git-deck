@@ -41,4 +41,7 @@ internal sealed class DesignBranchService : IBranchService
 
     public Task<PullResult> PullCurrentBranchAsync(string? repositoryPath, CancellationToken cancellationToken = default)
         => Task.FromResult(new PullResult(true, null));
+
+    public Task<PushResult> PushCurrentBranchAsync(string? repositoryPath, CancellationToken cancellationToken = default)
+        => Task.FromResult(new PushResult(true, false, null));
 }
