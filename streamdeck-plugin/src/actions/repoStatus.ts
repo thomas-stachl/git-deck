@@ -155,23 +155,37 @@ function badgeStateFor(overview: RepositoryOverview): BadgeState {
 }
 
 /**
- * "main / ↓3 ↑1" for diverged history, "main / up to date" once neither, or just the branch name
- * when there's no upstream to compare against — mirrors RunViewModel.DescribeUpstream's wording.
+ * Stream Deck shrinks/wraps overlong title text on its own, but does it badly enough to be worth
+ * pre-empting. 12 characters ("streamdeck-…") already turned out to still be too wide — confirmed
+ * from the plugin's own log, that exact string was handed to setTitle and Stream Deck *still*
+ * rendered it as a mangled mid-word fragment. Cut further and re-check rather than trusting this
+ * number; there's no way to verify actual key rendering from outside a real device.
+ */
+const MAX_BRANCH_NAME_LENGTH = 8;
+
+function shortenBranchName(name: string): string {
+  return name.length > MAX_BRANCH_NAME_LENGTH
+    ? `${name.slice(0, MAX_BRANCH_NAME_LENGTH - 1)}…`
+    : name;
+}
+
+/**
+ * "main / -3 +1" for diverged history, or just the branch name once neither (or when there's no
+ * upstream to compare against) — the up-to-date/behind badge already carries that distinction
+ * visually, so the title doesn't need to spell out "up to date" too. Plain +/- rather than ↓/↑:
+ * one less Unicode glyph that might not render cleanly at key-title size, and it matches the
+ * +N/-N convention this repo's own shell prompt already uses for ahead/behind.
  */
 function describeStatus(overview: RepositoryOverview): string {
-  const branch = overview.Head ?? "?";
+  const branch = shortenBranchName(overview.Head ?? "?");
 
-  if (!overview.HasUpstream) {
+  if (!overview.HasUpstream || (overview.BehindBy === 0 && overview.AheadBy === 0)) {
     return branch;
   }
 
-  if (overview.BehindBy === 0 && overview.AheadBy === 0) {
-    return `${branch}\nup to date`;
-  }
-
   const parts: string[] = [];
-  if (overview.BehindBy > 0) parts.push(`↓${overview.BehindBy}`);
-  if (overview.AheadBy > 0) parts.push(`↑${overview.AheadBy}`);
+  if (overview.BehindBy > 0) parts.push(`-${overview.BehindBy}`);
+  if (overview.AheadBy > 0) parts.push(`+${overview.AheadBy}`);
 
   return `${branch}\n${parts.join(" ")}`;
 }
