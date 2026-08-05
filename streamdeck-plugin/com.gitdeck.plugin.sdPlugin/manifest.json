@@ -6,7 +6,7 @@
   "Version": "0.1.0.0",
   "Icon": "imgs/plugin-icon",
   "Category": "GitDeck",
-  "CategoryIcon": "imgs/plugin-icon",
+  "CategoryIcon": "imgs/category-icon",
   "CodePath": "bin/plugin.js",
   "SDKVersion": 3,
   "Software": {

@@ -26,6 +26,25 @@ const BADGE_COLOR: Record<BadgeState, string> = {
 };
 
 /**
+ * Designed artwork for the two states that have it (from Downloads/Gitdeck App Icon Design/
+ * streamdeck/status-uptodate.svg and status-behind.svg, copied verbatim) — the other four states
+ * fall back to a plain generated background until matching artwork exists for them too.
+ */
+const DESIGNED_BADGE_SVG: Partial<Record<BadgeState, string>> = {
+  upToDate: `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+  <rect width="144" height="144" fill="#151515"></rect>
+  <circle cx="72" cy="72" r="46" fill="none" stroke="#44CB62" stroke-width="10"></circle>
+  <path d="M50 73 L66 89 L96 55" fill="none" stroke="#44CB62" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>`,
+  behind: `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+  <rect width="144" height="144" fill="#151515"></rect>
+  <path d="M72 26 V92" fill="none" stroke="#204CFE" stroke-width="12" stroke-linecap="round"></path>
+  <path d="M44 68 L72 96 L100 68" fill="none" stroke="#204CFE" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"></path>
+  <path d="M38 118 H106" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round"></path>
+</svg>`,
+};
+
+/**
  * Press pulls if behind, else opens the Branches palette scoped to this key's repo; the face shows
  * live ahead/behind. Reuses IBranchService's own ahead/behind semantics via GetStatusAsync — no
  * duplicated git logic here, same principle the .NET side follows.
@@ -158,11 +177,16 @@ function describeStatus(overview: RepositoryOverview): string {
 }
 
 /**
- * The key's full background, color-coded per state; setTitle renders the branch name as text on
- * top of it. Generated inline rather than shipped as pre-rendered PNGs per state — setImage
- * accepts a raw SVG string directly.
+ * The key's full background; setTitle renders the branch name as text on top of it. Uses the
+ * designed artwork where it exists (upToDate, behind), otherwise falls back to a plain
+ * color-coded generated rect. setImage accepts a raw SVG string directly either way.
  */
 function backgroundSvg(state: BadgeState): string {
+  const designed = DESIGNED_BADGE_SVG[state];
+  if (designed) {
+    return designed;
+  }
+
   const color = BADGE_COLOR[state];
   return `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144"><rect width="144" height="144" rx="18" fill="${color}"/></svg>`;
 }
