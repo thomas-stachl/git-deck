@@ -5,7 +5,7 @@ namespace GitDeck.App.Services;
 
 public class RunWindowService(RunWindow runWindow) : IRunWindowService
 {
-    public void Toggle(RunMode mode)
+    public void Toggle(RunMode mode, string? repositoryPathOverride = null)
     {
         if (runWindow.VisibleMode == mode)
         {
@@ -13,7 +13,7 @@ public class RunWindowService(RunWindow runWindow) : IRunWindowService
         }
         else
         {
-            runWindow.ShowNearTop(mode);
+            runWindow.ShowNearTop(mode, repositoryPathOverride);
         }
     }
 }

@@ -53,12 +53,12 @@ public partial class RunWindow : Window
     public RunMode? VisibleMode =>
         IsVisible && DataContext is RunViewModel viewModel ? viewModel.Mode : null;
 
-    public void ShowNearTop(RunMode mode)
+    public void ShowNearTop(RunMode mode, string? repositoryPathOverride = null)
     {
         // Set the mode before activating: OnActivated decides what to focus from it.
         if (DataContext is RunViewModel viewModel)
         {
-            _ = viewModel.OpenAsync(mode);
+            _ = viewModel.OpenAsync(mode, repositoryPathOverride);
         }
 
         PositionNearTop();

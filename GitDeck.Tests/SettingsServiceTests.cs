@@ -125,6 +125,20 @@ public sealed class SettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public void NullRecentRepositoryPathsFallsBackToEmptyList()
+    {
+        // A List<string> property has no custom setter to self-heal an explicit JSON null the way
+        // Ai's does — RecentRepositoryPaths' setter has to do that itself, or this crashes instead.
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(SettingsPath, """{ "RecentRepositoryPaths": null }""");
+
+        using var service = new SettingsService(SettingsPath);
+
+        Assert.NotNull(service.Settings.RecentRepositoryPaths);
+        Assert.Empty(service.Settings.RecentRepositoryPaths);
+    }
+
+    [Fact]
     public void ExplicitNullHotkeySurvivesRoundTrip()
     {
         // Absent key means default; an explicit null means the user cleared the hotkey.

@@ -30,7 +30,8 @@ public sealed record RunResult(RunResultKind Kind, string Title, string Subtitle
 public partial class BranchPaletteViewModel(
     ISettingsService settingsService,
     IBranchService branchService,
-    Func<Task> reloadRepositoryAsync) : PaletteViewModel
+    Func<Task> reloadRepositoryAsync,
+    Func<string?> getRepositoryPath) : PaletteViewModel
 {
     private const int MaxResults = 8;
 
@@ -106,7 +107,7 @@ public partial class BranchPaletteViewModel(
         return RunOperationAsync(busyMessage, "Could not create the branch.", async token =>
         {
             var creation = await branchService.CreateBranchAsync(
-                new CreateBranchRequest(settingsService.Settings.RepositoryPath, result.BranchName, publish),
+                new CreateBranchRequest(getRepositoryPath(), result.BranchName, publish),
                 token);
 
             return (creation.IsCreated, creation.ErrorMessage);
@@ -127,7 +128,7 @@ public partial class BranchPaletteViewModel(
         return RunOperationAsync(busyMessage, "Could not switch branches.", async token =>
         {
             var switched = await branchService.SwitchBranchAsync(
-                new SwitchBranchRequest(settingsService.Settings.RepositoryPath, branch),
+                new SwitchBranchRequest(getRepositoryPath(), branch),
                 token);
 
             return (switched.IsSwitched, switched.ErrorMessage);
@@ -146,7 +147,7 @@ public partial class BranchPaletteViewModel(
 
         return RunOperationAsync(busyMessage, "Could not pull the latest changes.", async token =>
         {
-            var pull = await branchService.PullCurrentBranchAsync(settingsService.Settings.RepositoryPath, token);
+            var pull = await branchService.PullCurrentBranchAsync(getRepositoryPath(), token);
             return (pull.IsPulled, pull.ErrorMessage);
         });
     }

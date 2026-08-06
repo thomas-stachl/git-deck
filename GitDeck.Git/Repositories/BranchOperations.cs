@@ -42,3 +42,14 @@ public sealed record PullResult(bool IsPulled, string? ErrorMessage)
 {
     public static PullResult Failed(string errorMessage) => new(false, errorMessage);
 }
+
+/// <summary>
+/// Result of pushing the current branch to its remote.
+/// </summary>
+/// <param name="DidPublish">
+/// Whether this push also set up the upstream — the branch had never been pushed before.
+/// </param>
+public sealed record PushResult(bool IsPushed, bool DidPublish, string? ErrorMessage)
+{
+    public static PushResult Failed(string errorMessage) => new(false, false, errorMessage);
+}

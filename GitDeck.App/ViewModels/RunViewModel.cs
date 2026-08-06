@@ -28,6 +28,7 @@ public partial class RunViewModel : ObservableObject
 
     private RepositoryOverview _repository = RepositoryOverview.NotARepository;
     private CancellationTokenSource? _loadCancellation;
+    private string? _repositoryPathOverride;
 
     public RunViewModel(
         ISettingsService settingsService,
@@ -38,7 +39,7 @@ public partial class RunViewModel : ObservableObject
         _settingsService = settingsService;
         _branchService = branchService;
 
-        Branches = new BranchPaletteViewModel(settingsService, branchService, LoadRepositoryAsync);
+        Branches = new BranchPaletteViewModel(settingsService, branchService, LoadRepositoryAsync, () => EffectiveRepositoryPath);
         Commit = new CommitPaletteViewModel(commitService, commitMessageService);
 
         // IsBusy is computed over the children, so their changes have to be re-announced for any
@@ -104,13 +105,25 @@ public partial class RunViewModel : ObservableObject
     /// Switches to a mode and re-reads the repository. Called each time the window is shown so both
     /// the branch list and the changed files reflect the repository as it is now.
     /// </summary>
-    public Task OpenAsync(RunMode mode)
+    /// <param name="repositoryPathOverride">
+    /// Repository to read instead of <c>Settings.RepositoryPath</c> — set by an IPC-triggered open
+    /// (a Stream Deck key) that targets its own configured repo. Null (the hotkey path) keeps
+    /// reading the globally-configured repository, same as before this parameter existed.
+    /// </param>
+    public Task OpenAsync(RunMode mode, string? repositoryPathOverride = null)
     {
+        _repositoryPathOverride = repositoryPathOverride;
         Mode = mode;
         Reset();
 
         return LoadRepositoryAsync();
     }
+
+    /// <summary>
+    /// The repository every read in this view model and <see cref="Branches"/> targets: whatever
+    /// <see cref="OpenAsync"/> was last given, falling back to the globally-configured repository.
+    /// </summary>
+    private string? EffectiveRepositoryPath => _repositoryPathOverride ?? _settingsService.Settings.RepositoryPath;
 
     /// <summary>Cancels in-flight work in both modes and clears their transient state.</summary>
     public void Reset()
@@ -155,7 +168,7 @@ public partial class RunViewModel : ObservableObject
 
         try
         {
-            _repository = await _branchService.GetOverviewAsync(_settingsService.Settings.RepositoryPath, cancellationToken);
+            _repository = await _branchService.GetOverviewAsync(EffectiveRepositoryPath, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -203,7 +216,7 @@ public partial class RunViewModel : ObservableObject
 
         try
         {
-            fetch = await _branchService.FetchAsync(_settingsService.Settings.RepositoryPath, cancellationToken);
+            fetch = await _branchService.FetchAsync(EffectiveRepositoryPath, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -221,7 +234,7 @@ public partial class RunViewModel : ObservableObject
 
         try
         {
-            _repository = await _branchService.GetOverviewAsync(_settingsService.Settings.RepositoryPath, cancellationToken);
+            _repository = await _branchService.GetOverviewAsync(EffectiveRepositoryPath, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -255,7 +268,7 @@ public partial class RunViewModel : ObservableObject
             return;
         }
 
-        var configuredPath = _settingsService.Settings.RepositoryPath;
+        var configuredPath = EffectiveRepositoryPath;
 
         RepositoryPathDisplay = string.IsNullOrWhiteSpace(configuredPath)
             ? "No repository configured"
@@ -271,10 +284,10 @@ public partial class RunViewModel : ObservableObject
         {
             // A bare repository is still a repository, it just has no working tree to name.
             { IsRepository: true, WorkingDirectory: { } directory } => ShortenPath(directory),
-            { IsRepository: true } => ShortenPath(_settingsService.Settings.RepositoryPath),
+            { IsRepository: true } => ShortenPath(EffectiveRepositoryPath),
             // A permission problem or corrupt index is not the same as "not a repository".
             { LoadError: not null } => "Could not read the repository",
-            _ when string.IsNullOrWhiteSpace(_settingsService.Settings.RepositoryPath) => "No repository configured",
+            _ when string.IsNullOrWhiteSpace(EffectiveRepositoryPath) => "No repository configured",
             _ => "Not a Git repository",
         };
 
